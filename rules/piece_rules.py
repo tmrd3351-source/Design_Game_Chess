@@ -1,0 +1,61 @@
+from rules.path_clear import path_clear
+
+
+class KingRule:
+
+    def is_legal(self, board, source, destination):
+        dr = abs(destination.get_row() - source.get_row())
+        dc = abs(destination.get_col() - source.get_col())
+        return dr <= 1 and dc <= 1
+
+
+class QueenRule:
+
+    def is_legal(self, board, source, destination):
+        same_row = source.get_row() == destination.get_row()
+        same_col = source.get_col() == destination.get_col()
+        dr = abs(destination.get_row() - source.get_row())
+        dc = abs(destination.get_col() - source.get_col())
+        return (same_row or same_col or dr == dc) and path_clear(board, source, destination)
+
+
+class BishopRule:
+
+    def is_legal(self, board, source, destination):
+        dr = abs(destination.get_row() - source.get_row())
+        dc = abs(destination.get_col() - source.get_col())
+        return dr == dc and path_clear(board, source, destination)
+
+
+class KnightRule:
+
+    def is_legal(self, board, source, destination):
+        dr = abs(destination.get_row() - source.get_row())
+        dc = abs(destination.get_col() - source.get_col())
+        return (dr == 2 and dc == 1) or (dr == 1 and dc == 2)
+
+
+class RookRule:
+
+    def is_legal(self, board, source, destination):
+        same_row = source.get_row() == destination.get_row()
+        same_col = source.get_col() == destination.get_col()
+        return (same_row or same_col) and path_clear(board, source, destination)
+
+
+class PawnRule:
+
+    def is_legal(self, board, source, destination):
+        piece = board.get_piece(source)
+        direction = -1 if piece.get_color() == "w" else 1
+
+        dr = destination.get_row() - source.get_row()
+        dc = destination.get_col() - source.get_col()
+
+        if dc == 0 and dr == direction:
+            return board.get_piece(destination) is None
+
+        if abs(dc) == 1 and dr == direction:
+            return board.get_piece(destination) is not None
+
+        return False
