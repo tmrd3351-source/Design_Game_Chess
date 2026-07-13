@@ -1,5 +1,5 @@
 class LegalDestination:
-
+    # Checks if a destination is legal for a piece of a given color.
     @staticmethod
     def check(board, position, color):
         if not board.inside_bounds(position):

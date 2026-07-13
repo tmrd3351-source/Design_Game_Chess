@@ -1,5 +1,6 @@
 from model.move_result import MoveResult
 from rules.piece_rules import KingRule, QueenRule, BishopRule, KnightRule, RookRule, PawnRule
+#To receive a request for a move and decide whether it is legal according to the rules of the game.
 
 
 DEFAULT_RULES = {

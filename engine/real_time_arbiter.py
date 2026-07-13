@@ -1,5 +1,5 @@
 from model.motion import Motion
-
+#לנהל את כל מה שקורה כאשר הזמן מתקדם והתנועות מסתיימות
 
 class RealTimeArbiter:
 
@@ -14,15 +14,18 @@ class RealTimeArbiter:
         self.motions.append(motion)
 
     def is_source_busy(self, position):
-        return any(motion.origin.equals(position) for motion in self.motions)
+        return any(motion.origin.equals(position) 
+                   for motion in self.motions)
 
     def advance(self, current_time):
         while True:
-            due = [m for m in self.motions if m.start_time + m.duration <= current_time]
+            due = [m for m in self.motions
+                   if m.start_time + m.duration <= current_time]
             if not due:
                 break
 
-            due.sort(key=lambda m: (m.start_time + m.duration, m.kind == "jump", m.sequence))
+            due.sort(key=lambda m: (m.start_time + m.duration,
+                                    m.kind == "jump", m.sequence))
             motion = due[0]
             self.motions.remove(motion)
             self._resolve(motion)
@@ -48,7 +51,8 @@ class RealTimeArbiter:
             return
 
         rule = self.rule_engine.rules.get(piece.get_kind())
-        if rule is None or not rule.is_legal(self.board, piece, motion.source, destination):
+        if rule is None or not rule.is_legal(self.board, piece
+                                             , motion.source, destination):
             self._land(motion, motion.source)
             return
 

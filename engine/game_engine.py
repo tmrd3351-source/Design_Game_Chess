@@ -3,7 +3,7 @@ from engine.route import compute_route
 from model.motion import Motion
 from model.move_result import MoveResult
 
-
+#מנהל את הזמן של המשחק מקבל פקודות מהמשתמש ומתחיל תנועות
 class GameEngine:
 
     def __init__(self, board, rule_engine, arbiter):
