@@ -1,4 +1,4 @@
-from controller.parser import parse_input, validate, build_board
+from controller.game_setup import GameSetup
 from controller.controller import Controller
 from controller.board_mapper import BoardMapper
 from engine.game_engine import GameEngine
@@ -10,20 +10,20 @@ from rules.rule_engine import RuleEngine
 class Application:
     """Composition root: wires the object graph and runs the command stream."""
 
-    def run(self):
-        tokens, commands = parse_input()
-        error = validate(tokens)
+    def __init__(self, game_setup=None):
+        self.game_setup = game_setup or GameSetup()
 
-        if error:
-            print(error)
+    def run(self):
+        result = self.game_setup.load()
+        if result is None:
             return
 
-        controller = self._build_controller(tokens)
+        board, commands = result
+        controller = self._build_controller(board)
         for command in commands:
             controller.apply_command(command)
 
-    def _build_controller(self, tokens):
-        board = build_board(tokens)
+    def _build_controller(self, board):
         rule_engine = RuleEngine()
         arbiter = RealTimeArbiter(board, rule_engine)
         game_engine = GameEngine(board, rule_engine, arbiter)

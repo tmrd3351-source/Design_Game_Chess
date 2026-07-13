@@ -19,6 +19,9 @@ class Piece:
     def get_kind(self):
         return self.kind
 
+    def set_kind(self, kind):
+        self.kind = kind
+
     def get_state(self):
         return self.state
 

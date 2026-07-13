@@ -1,5 +1,4 @@
 from model.move_result import MoveResult
-from rules.legal_destination import LegalDestination
 from rules.piece_rules import KingRule, QueenRule, BishopRule, KnightRule, RookRule, PawnRule
 
 
@@ -29,11 +28,8 @@ class RuleEngine:
         if source.equals(destination):
             return MoveResult.illegal("illegal_move")
 
-        if not LegalDestination.check(board, destination, piece.get_color()):
-            return MoveResult.illegal("blocked")
-
         rule = self.rules.get(piece.get_kind())
-        if rule is None or not rule.is_legal(board, source, destination):
+        if rule is None or not rule.is_legal(board, piece, source, destination):
             return MoveResult.illegal("illegal_move")
 
         return MoveResult.legal()

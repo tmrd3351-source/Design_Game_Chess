@@ -9,6 +9,7 @@ class Controller:
             "print": self._handle_print,
             "wait": self._handle_wait,
             "click": self._handle_click,
+            "jump": self._handle_jump,
         }
 
     def apply_command(self, command):
@@ -34,24 +35,33 @@ class Controller:
         if len(tokens) == 3:
             self.handle_click(int(tokens[1]), int(tokens[2]))
 
+    def _handle_jump(self, tokens):
+        if len(tokens) == 3:
+            self.handle_jump(int(tokens[1]), int(tokens[2]))
+
+    def handle_jump(self, x, y):
+        position = self.board_mapper.to_position(x, y)
+
+        if not self.game_engine.inside_board(position):
+            return
+
+        self.game_engine.request_jump(position)
+
     def handle_click(self, x, y):
         position = self.board_mapper.to_position(x, y)
 
         if not self.game_engine.inside_board(position):
             return
 
-        piece = self.game_engine.get_piece(position)
-
         if self.selected is None:
-            if piece is not None and not self.game_engine.is_position_busy(position):
+            if self.game_engine.can_select(position):
                 self.selected = position
             return
 
         source = self.selected
-        source_piece = self.game_engine.get_piece(source)
 
-        if piece is not None and piece.get_color() == source_piece.get_color():
-            self.selected = None if self.game_engine.is_position_busy(position) else position
+        if self.game_engine.is_same_side(source, position):
+            self.selected = position if self.game_engine.can_select(position) else None
             return
 
         self.game_engine.request_move(source, position)
