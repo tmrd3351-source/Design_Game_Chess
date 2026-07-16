@@ -1,4 +1,4 @@
-from model.piece import REST_SHORT, REST_LONG
+from config.constants import REST_SHORT, REST_LONG, STATE_IDLE, STATE_MOVING, STATE_JUMPING
 from gui.image import load_animation_config, load_animation_frames
 
 # model.Piece.state (engine-owned: idle/moving/jumping) -> the animation
@@ -6,9 +6,9 @@ from gui.image import load_animation_config, load_animation_frames
 # piece's rest_type) changes; after that the clip's own config.json
 # (next_state_when_finished) takes over for non-looping clips.
 DRIVEN_CLIP_BY_MODEL_STATE = {
-    "moving": "move",
-    "jumping": "jump",
-    "idle": "idle",
+    STATE_MOVING: "move",
+    STATE_JUMPING: "jump",
+    STATE_IDLE: "idle",
 }
 
 # model.Piece.get_rest_type() -> the rest clip it drives while the piece
@@ -39,7 +39,7 @@ class AnimationManager:
         return self._cache[key]
 
     def _driven_clip(self, model_state, rest_type):
-        if model_state == "idle" and rest_type in REST_CLIP_BY_REST_TYPE:
+        if model_state == STATE_IDLE and rest_type in REST_CLIP_BY_REST_TYPE:
             return REST_CLIP_BY_REST_TYPE[rest_type]
         return DRIVEN_CLIP_BY_MODEL_STATE[model_state]
 

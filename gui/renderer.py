@@ -1,8 +1,7 @@
 import time
 
-from config.constants import CELL_SIZE
+from config.constants import CELL_SIZE, REST_NONE
 from model.position import Position
-from model.piece import REST_NONE
 from gui.animation_manager import AnimationManager
 from gui.image import load_board_image
 
