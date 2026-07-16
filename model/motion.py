@@ -1,3 +1,6 @@
+from config.constants import MOTION_TRANSLATE
+
+
 class Motion:
     """A single-square leg of a (possibly multi-square) commanded move.
 
@@ -7,7 +10,7 @@ class Motion:
     """
 
     def __init__(self, piece, origin, source, destination, start_time, duration,
-                 kind="translate", sequence=0, remaining_route=None):
+                 kind=MOTION_TRANSLATE, sequence=0, remaining_route=None):
         self.piece = piece
         self.origin = origin
         self.source = source

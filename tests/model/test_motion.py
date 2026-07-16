@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import Mock
 
+from config.constants import MOTION_TRANSLATE, MOTION_JUMP
 from model.motion import Motion
 
 
@@ -22,11 +23,11 @@ class TestMotionConstruction(unittest.TestCase):
 
     def test_default_kind_is_translate(self):
         motion = Motion(Mock(), Mock(), Mock(), Mock(), 0, 1000)
-        self.assertEqual(motion.kind, "translate")
+        self.assertEqual(motion.kind, MOTION_TRANSLATE)
 
     def test_kind_can_be_overridden_to_jump(self):
-        motion = Motion(Mock(), Mock(), Mock(), Mock(), 0, 1000, kind="jump")
-        self.assertEqual(motion.kind, "jump")
+        motion = Motion(Mock(), Mock(), Mock(), Mock(), 0, 1000, kind=MOTION_JUMP)
+        self.assertEqual(motion.kind, MOTION_JUMP)
 
     def test_default_sequence_is_zero(self):
         motion = Motion(Mock(), Mock(), Mock(), Mock(), 0, 1000)

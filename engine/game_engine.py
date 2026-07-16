@@ -1,4 +1,4 @@
-from config.constants import MOVE_TIME
+from config.constants import MOVE_TIME, MOTION_TRANSLATE, MOTION_JUMP
 from engine.route import compute_route
 from model.motion import Motion
 from model.move_result import MoveResult
@@ -43,7 +43,7 @@ class GameEngine:
         piece = self.board.get_piece(source)
         route = compute_route(piece.get_kind(), source, destination)
         motion = Motion(piece, source, source, route[0], self.time, MOVE_TIME,
-                         kind="translate", sequence=self._next_sequence(),
+                         kind=MOTION_TRANSLATE, sequence=self._next_sequence(),
                          remaining_route=route[1:])
         self.arbiter.schedule(motion)
         return result
@@ -60,7 +60,7 @@ class GameEngine:
             return MoveResult.illegal("illegal_move")
 
         motion = Motion(piece, position, position, position, self.time, MOVE_TIME,
-                         kind="jump", sequence=self._next_sequence())
+                         kind=MOTION_JUMP, sequence=self._next_sequence())
         self.arbiter.schedule(motion)
         return MoveResult.legal()
 

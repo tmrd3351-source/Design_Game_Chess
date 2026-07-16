@@ -41,7 +41,9 @@ class Controller:
 
     def handle_jump(self, x, y):
         position = self.board_mapper.to_position(x, y)
+        self.handle_square_jump(position)
 
+    def handle_square_jump(self, position):
         if not self.game_engine.inside_board(position):
             return
 
@@ -49,7 +51,9 @@ class Controller:
 
     def handle_click(self, x, y):
         position = self.board_mapper.to_position(x, y)
+        self.handle_square_click(position)
 
+    def handle_square_click(self, position):
         if not self.game_engine.inside_board(position):
             return
 

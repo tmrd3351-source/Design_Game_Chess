@@ -1,3 +1,3 @@
 from app import Application
 
-Application().run()
+Application().run_gui()
