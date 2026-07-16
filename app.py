@@ -24,22 +24,22 @@ class Application:
 
         board, commands = result
         controller = self._build_controller(board)
+        renderer = Renderer()
         for command in commands:
-            controller.apply_command(command)
+            state = controller.apply_command(command)
+            if state is not None:
+                renderer.render(state.board)
 
     def run_gui(self, board_setup=None):
-  
-
         board = (board_setup or GuiBoardSetup()).load()
         if board is None:
             return
 
-        gui_renderer = GuiRenderer()
-        controller = self._build_controller(board, renderer=gui_renderer)
-        run_gui_loop(controller, renderer=gui_renderer)
+        controller = self._build_controller(board)
+        run_gui_loop(controller, renderer=GuiRenderer())
 
-    def _build_controller(self, board, renderer=None):
+    def _build_controller(self, board):
         rule_engine = RuleEngine()
         arbiter = RealTimeArbiter(board, rule_engine)
         game_engine = GameEngine(board, rule_engine, arbiter)
-        return Controller(game_engine, BoardMapper(), renderer or Renderer())
+        return Controller(game_engine, BoardMapper())

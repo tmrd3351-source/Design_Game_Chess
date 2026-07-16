@@ -1,9 +1,11 @@
+from model.game_state import GameState
+
+
 class Controller:
 
-    def __init__(self, game_engine, board_mapper, renderer, command_handlers=None):
+    def __init__(self, game_engine, board_mapper, command_handlers=None):
         self.game_engine = game_engine
         self.board_mapper = board_mapper
-        self.renderer = renderer
         self.selected = None
         self.command_handlers = command_handlers or {
             "print": self._handle_print,
@@ -15,17 +17,22 @@ class Controller:
     def apply_command(self, command):
         tokens = command.split()
         if not tokens:
-            return
+            return None
 
         handler = self.command_handlers.get(tokens[0])
         if handler is None:
-            return
+            return None
 
-        handler(tokens)
+        return handler(tokens)
+
+    def get_state(self):
+        return GameState(self.game_engine.board,
+                          self.game_engine.arbiter.winner,
+                          self.game_engine.arbiter.game_over)
 
     def _handle_print(self, _tokens):
         self.game_engine.resolve()
-        self.renderer.render(self.game_engine.board)
+        return self.get_state()
 
     def _handle_wait(self, tokens):
         if len(tokens) == 2:

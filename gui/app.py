@@ -9,11 +9,11 @@ FRAME_DELAY_MS = 16
 GAME_OVER_COLOR = (0, 0, 255, 255)  # BGRA red
 
 
-def _draw_game_over_overlay(canvas, arbiter):
-    if not arbiter.game_over:
+def _draw_game_over_overlay(canvas, state):
+    if not state.game_over:
         return
     height, width = canvas.img.shape[:2]
-    winner_label = "White" if arbiter.winner == "w" else "Black"
+    winner_label = "White" if state.winner == "w" else "Black"
     canvas.put_text("GAME OVER", width // 2 - 150, height // 2 - 10,
                      font_size=1.4, color=GAME_OVER_COLOR, thickness=3)
     canvas.put_text(f"{winner_label} wins!", width // 2 - 120, height // 2 + 40,
@@ -26,7 +26,6 @@ def run_gui_loop(controller, renderer=None):
     GameEngine/RuleEngine/RealTimeArbiter are never touched directly here -
     only through Controller/GameEngine's existing public methods."""
     renderer = renderer or Renderer()
-    board = controller.game_engine.board
 
     def on_mouse(event, x, y, _flags, _param):
         if event == cv2.EVENT_LBUTTONDOWN:
@@ -46,8 +45,9 @@ def run_gui_loop(controller, renderer=None):
         if elapsed_ms > 0:
             controller.game_engine.wait(elapsed_ms)
 
-        canvas = renderer.compose_board(board, now)
-        _draw_game_over_overlay(canvas, controller.game_engine.arbiter)
+        state = controller.get_state()
+        canvas = renderer.compose_board(state.board, now)
+        _draw_game_over_overlay(canvas, state)
         cv2.imshow(WINDOW_NAME, canvas.img)
 
         key = cv2.waitKey(FRAME_DELAY_MS) & 0xFF
