@@ -1,10 +1,10 @@
 from config.constants import EMPTY_CELL
-from controller.parser import validate, build_board
-from gui.board_layout import load_layout, BOARD_CSV_PATH
+from setup.parser import validate, build_board
+from setup.board_layout import load_layout, BOARD_CSV_PATH
 
 
 def _to_token(code):
-    """"RB" (Rook, Black) -> "bR", matching controller.parser's <color><kind>
+    """"RB" (Rook, Black) -> "bR", matching setup.parser's <color><kind>
     token order; the CSV/sprite folders use the opposite <kind><color> order."""
     if not code:
         return EMPTY_CELL

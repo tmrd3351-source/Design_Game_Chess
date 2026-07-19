@@ -1,15 +1,15 @@
-from controller.game_setup import GameSetup
+from setup.game_setup import GameSetup
 from controller.controller import Controller
 from controller.board_mapper import BoardMapper
 from engine.game_engine import GameEngine
 from engine.real_time_arbiter import RealTimeArbiter
-from renderer.renderer import Renderer
+from rendering.cli_renderer import CliRenderer
 from rules.rule_engine import RuleEngine
 
 # Imported lazily so the CLI path (run()) never requires opencv.
-from gui.board_setup import GuiBoardSetup
-from gui.renderer import Renderer as GuiRenderer
-from gui.app import run_gui_loop
+from setup.board_setup import GuiBoardSetup
+from rendering.gui_renderer import GuiRenderer
+from gui.game_window import GameWindow
         
 class Application:
     """Composition root: wires the object graph and runs the command stream."""
@@ -24,7 +24,7 @@ class Application:
 
         board, commands = result
         controller = self._build_controller(board)
-        renderer = Renderer()
+        renderer = CliRenderer()
         for command in commands:
             state = controller.apply_command(command)
             if state is not None:
@@ -36,7 +36,7 @@ class Application:
             return
 
         controller = self._build_controller(board)
-        run_gui_loop(controller, renderer=GuiRenderer())
+        GameWindow(controller, GuiRenderer()).run()
 
     def _build_controller(self, board):
         rule_engine = RuleEngine()

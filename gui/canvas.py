@@ -5,14 +5,14 @@ import pathlib
 import cv2
 import numpy as np
 
-class Img:
+class Canvas:
     def __init__(self):
         self.img = None
 
     def read(self, path: str | pathlib.Path,
              size: tuple[int, int] | None = None,
              keep_aspect: bool = False,
-             interpolation: int = cv2.INTER_AREA) -> "Img":
+             interpolation: int = cv2.INTER_AREA) -> "Canvas":
         """
         Load `path` into self.img and **optionally resize**.
 
@@ -31,8 +31,8 @@ class Img:
 
         Returns
         -------
-        Img
-            `self`, so you can chain:  `sprite = Img().read("foo.png", (64,64))`
+        Canvas
+            `self`, so you can chain:  `sprite = Canvas().read("foo.png", (64,64))`
         """
         path = str(path)
         self.img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
@@ -53,23 +53,23 @@ class Img:
 
         return self
 
-    def draw_on(self, other_img, x, y):
-        if self.img is None or other_img.img is None:
+    def draw_on(self, other_canvas, x, y):
+        if self.img is None or other_canvas.img is None:
             raise ValueError("Both images must be loaded before drawing.")
 
-        if self.img.shape[2] != other_img.img.shape[2]:
-            if self.img.shape[2] == 3 and other_img.img.shape[2] == 4:
+        if self.img.shape[2] != other_canvas.img.shape[2]:
+            if self.img.shape[2] == 3 and other_canvas.img.shape[2] == 4:
                 self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2BGRA)
-            elif self.img.shape[2] == 4 and other_img.img.shape[2] == 3:
+            elif self.img.shape[2] == 4 and other_canvas.img.shape[2] == 3:
                 self.img = cv2.cvtColor(self.img, cv2.COLOR_BGRA2BGR)
 
         h, w = self.img.shape[:2]
-        H, W = other_img.img.shape[:2]
+        H, W = other_canvas.img.shape[:2]
 
         if y + h > H or x + w > W:
             raise ValueError("Logo does not fit at the specified position.")
 
-        roi = other_img.img[y:y + h, x:x + w]
+        roi = other_canvas.img[y:y + h, x:x + w]
 
         if self.img.shape[2] == 4:
             b, g, r, a = cv2.split(self.img)
@@ -77,7 +77,7 @@ class Img:
             for c in range(3):
                 roi[..., c] = (1 - mask) * roi[..., c] + mask * self.img[..., c]
         else:
-            other_img.img[y:y + h, x:x + w] = self.img
+            other_canvas.img[y:y + h, x:x + w] = self.img
 
     def draw_overlay_rect(self, x, y, w, h, color, alpha):
         """Alpha-blend a solid BGR color rectangle onto this image in place.

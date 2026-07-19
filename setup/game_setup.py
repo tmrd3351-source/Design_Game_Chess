@@ -1,4 +1,4 @@
-from controller.parser import parse_input, validate, build_board
+from setup.parser import parse_input, validate, build_board
 
 
 class GameSetup:

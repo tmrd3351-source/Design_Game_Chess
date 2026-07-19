@@ -28,7 +28,8 @@ class Controller:
     def get_state(self):
         return GameState(self.game_engine.board,
                           self.game_engine.arbiter.winner,
-                          self.game_engine.arbiter.game_over)
+                          self.game_engine.arbiter.game_over,
+                          self.game_engine.arbiter.motions)
 
     def _handle_print(self, _tokens):
         self.game_engine.resolve()
@@ -36,7 +37,7 @@ class Controller:
 
     def _handle_wait(self, tokens):
         if len(tokens) == 2:
-            self.game_engine.wait(int(tokens[1]))
+            self.handle_wait(int(tokens[1]))
 
     def _handle_click(self, tokens):
         if len(tokens) == 3:
@@ -45,6 +46,9 @@ class Controller:
     def _handle_jump(self, tokens):
         if len(tokens) == 3:
             self.handle_jump(int(tokens[1]), int(tokens[2]))
+
+    def handle_wait(self, ms):
+        self.game_engine.wait(ms)
 
     def handle_jump(self, x, y):
         position = self.board_mapper.to_position(x, y)

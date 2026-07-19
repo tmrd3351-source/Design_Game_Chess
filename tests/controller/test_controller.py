@@ -95,6 +95,7 @@ class TestApplyCommandDispatch(unittest.TestCase):
         game_engine.board = "the_board"
         game_engine.arbiter.winner = "w"
         game_engine.arbiter.game_over = True
+        game_engine.arbiter.motions = ["a_motion"]
 
         state = controller.apply_command("print board")
 
@@ -102,6 +103,7 @@ class TestApplyCommandDispatch(unittest.TestCase):
         self.assertEqual(state.board, "the_board")
         self.assertEqual(state.winner, "w")
         self.assertTrue(state.game_over)
+        self.assertEqual(state.motions, ["a_motion"])
 
     def test_print_command_resolves_before_building_the_returned_state(self):
         controller, game_engine, board_mapper = make_controller()
@@ -120,22 +122,6 @@ class TestApplyCommandDispatch(unittest.TestCase):
         self.assertIsNone(controller.apply_command("wait 100"))
         self.assertIsNone(controller.apply_command("click 50 50"))
         self.assertIsNone(controller.apply_command("jump 50 50"))
-
-
-class TestGetState(unittest.TestCase):
-
-    def test_returns_a_game_state_built_from_the_engine_and_arbiter(self):
-        controller, game_engine, board_mapper = make_controller()
-        game_engine.board = "the_board"
-        game_engine.arbiter.winner = "b"
-        game_engine.arbiter.game_over = False
-
-        state = controller.get_state()
-
-        self.assertIsInstance(state, GameState)
-        self.assertEqual(state.board, "the_board")
-        self.assertEqual(state.winner, "b")
-        self.assertFalse(state.game_over)
 
     def test_wait_command_advances_engine_time_as_int(self):
         controller, game_engine, *_ = make_controller()
@@ -183,6 +169,32 @@ class TestGetState(unittest.TestCase):
         controller, game_engine, board_mapper = make_controller()
         controller.apply_command("jump 50")
         board_mapper.to_position.assert_not_called()
+
+
+class TestGetState(unittest.TestCase):
+
+    def test_returns_a_game_state_built_from_the_engine_and_arbiter(self):
+        controller, game_engine, board_mapper = make_controller()
+        game_engine.board = "the_board"
+        game_engine.arbiter.winner = "b"
+        game_engine.arbiter.game_over = False
+        game_engine.arbiter.motions = ["a_motion"]
+
+        state = controller.get_state()
+
+        self.assertIsInstance(state, GameState)
+        self.assertEqual(state.board, "the_board")
+        self.assertEqual(state.winner, "b")
+        self.assertFalse(state.game_over)
+        self.assertEqual(state.motions, ["a_motion"])
+
+
+class TestHandleWait(unittest.TestCase):
+
+    def test_delegates_to_game_engine_wait(self):
+        controller, game_engine, *_ = make_controller()
+        controller.handle_wait(500)
+        game_engine.wait.assert_called_once_with(500)
 
 
 class TestHandleClick(unittest.TestCase):

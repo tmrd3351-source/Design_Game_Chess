@@ -2,7 +2,7 @@ from config.constants import EMPTY_CELL
 from model.position import Position
 
 
-class Renderer:
+class CliRenderer:
 
     def render(self, board):
         for row in range(board.rows):
