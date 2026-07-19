@@ -26,12 +26,22 @@ def _state_dir(code: str, state: str) -> Path:
     return PICTURES_DIR / code / "states" / state
 
 
+_animation_config_cache: dict[tuple[str, str], dict] = {}
+_animation_frames_cache: dict[tuple[str, str], list[Canvas]] = {}
+
+
 def load_animation_config(code: str, state: str) -> dict:
-    with open(_state_dir(code, state) / "config.json", encoding="utf-8") as f:
-        return json.load(f)
+    key = (code, state)
+    if key not in _animation_config_cache:
+        with open(_state_dir(code, state) / "config.json", encoding="utf-8") as f:
+            _animation_config_cache[key] = json.load(f)
+    return _animation_config_cache[key]
 
 
 def load_animation_frames(code: str, state: str) -> list[Canvas]:
-    sprites_dir = _state_dir(code, state) / "sprites"
-    frame_paths = sorted(sprites_dir.glob("*.png"), key=lambda p: int(p.stem))
-    return [Canvas().read(path, size=(CELL_SIZE, CELL_SIZE)) for path in frame_paths]
+    key = (code, state)
+    if key not in _animation_frames_cache:
+        sprites_dir = _state_dir(code, state) / "sprites"
+        frame_paths = sorted(sprites_dir.glob("*.png"), key=lambda p: int(p.stem))
+        _animation_frames_cache[key] = [Canvas().read(path, size=(CELL_SIZE, CELL_SIZE)) for path in frame_paths]
+    return _animation_frames_cache[key]
