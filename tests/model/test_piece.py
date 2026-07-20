@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 from config.constants import REST_NONE, REST_SHORT, STATE_IDLE, STATE_MOVING
 from model.piece import Piece
+from model.position import Position
 
 
 class TestPiece(unittest.TestCase):
@@ -97,6 +98,20 @@ class TestPiece(unittest.TestCase):
         self.assertEqual(piece_b.get_state(), STATE_IDLE)
         self.assertEqual(piece_a.get_kind(), "K")
         self.assertEqual(piece_b.get_kind(), "Q")
+
+    def test_to_dict_returns_a_plain_json_safe_snapshot(self):
+        piece = Piece(3, "w", "Q", Position(2, 4))
+        piece.set_rest_progress(0.5)
+
+        self.assertEqual(piece.to_dict(), {
+            "id": 3,
+            "color": "w",
+            "kind": "Q",
+            "position": {"row": 2, "col": 4},
+            "state": STATE_IDLE,
+            "rest_type": REST_NONE,
+            "rest_progress": 0.5,
+        })
 
 
 if __name__ == "__main__":

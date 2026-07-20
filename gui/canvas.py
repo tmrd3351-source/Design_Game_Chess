@@ -9,6 +9,14 @@ class Canvas:
     def __init__(self):
         self.img = None
 
+    @staticmethod
+    def blank(width: int, height: int, color: tuple[int, int, int] = (30, 30, 30)) -> "Canvas":
+        """A solid-color canvas not loaded from any file - for screens like
+        the login form that don't have a background image."""
+        canvas = Canvas()
+        canvas.img = np.full((height, width, 3), color, dtype=np.uint8)
+        return canvas
+
     def read(self, path: str | pathlib.Path,
              size: tuple[int, int] | None = None,
              keep_aspect: bool = False,

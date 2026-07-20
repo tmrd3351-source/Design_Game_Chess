@@ -1,0 +1,8 @@
+MOVE_COMPLETED = "move_completed"
+PIECE_CAPTURED = "piece_captured"
+GAME_STARTED = "game_started"
+GAME_ENDED = "game_ended"
+PLAYER_JOINED = "player_joined"
+PLAYER_LEFT = "player_left"
+PLAYER_DISCONNECTED = "player_disconnected"
+PLAYER_RECONNECTED = "player_reconnected"

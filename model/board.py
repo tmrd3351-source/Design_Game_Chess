@@ -26,3 +26,10 @@ class Board:
 
     def inside_bounds(self, position):
         return 0 <= position.get_row() < self.rows and 0 <= position.get_col() < self.cols
+
+    def to_dict(self):
+        return {
+            "rows": self.rows,
+            "cols": self.cols,
+            "pieces": [piece.to_dict() for row in self.grid for piece in row if piece is not None],
+        }

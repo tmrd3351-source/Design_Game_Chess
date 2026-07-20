@@ -44,3 +44,14 @@ class Piece:
 
     def set_rest_progress(self, rest_progress):
         self.rest_progress = rest_progress
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "color": self.color,
+            "kind": self.kind,
+            "position": self.position.to_dict(),
+            "state": self.state,
+            "rest_type": self.rest_type,
+            "rest_progress": self.rest_progress,
+        }

@@ -197,6 +197,27 @@ class TestHandleWait(unittest.TestCase):
         game_engine.wait.assert_called_once_with(500)
 
 
+class TestHandleMove(unittest.TestCase):
+
+    def test_delegates_to_game_engine_request_move_with_source_and_destination(self):
+        controller, game_engine, *_ = make_controller()
+        source = Mock()
+        destination = Mock()
+
+        controller.handle_move(source, destination)
+
+        game_engine.request_move.assert_called_once_with(source, destination)
+
+    def test_does_not_touch_current_selection(self):
+        controller, game_engine, *_ = make_controller()
+        selected = Mock()
+        controller.selected = selected
+
+        controller.handle_move(Mock(), Mock())
+
+        self.assertIs(controller.selected, selected)
+
+
 class TestHandleClick(unittest.TestCase):
 
     def test_click_outside_board_is_ignored_when_nothing_selected(self):

@@ -50,6 +50,9 @@ class Controller:
     def handle_wait(self, ms):
         self.game_engine.wait(ms)
 
+    def handle_move(self, source, destination):
+        self.game_engine.request_move(source, destination)
+
     def handle_jump(self, x, y):
         position = self.board_mapper.to_position(x, y)
         self.handle_square_jump(position)

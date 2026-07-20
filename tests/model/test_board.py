@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 from model.board import Board
 from model.position import Position
+from model.piece import Piece
 
 
 def make_piece(position):
@@ -227,6 +228,25 @@ class TestBoardInsideBounds(unittest.TestCase):
         self.assertTrue(board.inside_bounds(Position(1, 4)))
         self.assertFalse(board.inside_bounds(Position(2, 4)))
         self.assertFalse(board.inside_bounds(Position(1, 5)))
+
+
+class TestBoardToDict(unittest.TestCase):
+
+    def test_empty_board_has_no_pieces(self):
+        board = Board(2, 2)
+        self.assertEqual(board.to_dict(), {"rows": 2, "cols": 2, "pieces": []})
+
+    def test_includes_every_piece_on_the_board(self):
+        board = Board(3, 3)
+        board.add_piece(Piece(1, "w", "K", Position(0, 0)))
+        board.add_piece(Piece(2, "b", "Q", Position(2, 2)))
+
+        result = board.to_dict()
+
+        self.assertEqual(result["rows"], 3)
+        self.assertEqual(result["cols"], 3)
+        piece_ids = {p["id"] for p in result["pieces"]}
+        self.assertEqual(piece_ids, {1, 2})
 
 
 if __name__ == "__main__":

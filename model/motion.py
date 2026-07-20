@@ -28,3 +28,14 @@ class Motion:
 
     def is_complete(self):
         return self.progress >= 1.0
+
+    def to_dict(self):
+        return {
+            "piece_id": self.piece.id,
+            "origin": self.origin.to_dict(),
+            "source": self.source.to_dict(),
+            "destination": self.destination.to_dict(),
+            "kind": self.kind,
+            "sequence": self.sequence,
+            "progress": self.progress,
+        }

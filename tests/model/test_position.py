@@ -43,6 +43,9 @@ class TestPosition(unittest.TestCase):
 
         self.assertTrue(Position(7, 8).equals(DuckPosition()))
 
+    def test_to_dict_returns_row_and_col(self):
+        self.assertEqual(Position(3, 5).to_dict(), {"row": 3, "col": 5})
+
 
 if __name__ == "__main__":
     unittest.main()

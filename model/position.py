@@ -12,3 +12,6 @@ class Position:
 
     def get_col(self):
         return self.col
+
+    def to_dict(self):
+        return {"row": self.row, "col": self.col}

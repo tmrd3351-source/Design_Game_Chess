@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 from config.constants import MOTION_TRANSLATE, MOTION_JUMP
 from model.motion import Motion
+from model.position import Position
 
 
 class TestMotionConstruction(unittest.TestCase):
@@ -125,6 +126,25 @@ class TestMotionIsComplete(unittest.TestCase):
         motion = Motion(Mock(), Mock(), Mock(), Mock(), start_time=0, duration=1000)
         motion.update(9999)
         self.assertTrue(motion.is_complete())
+
+
+class TestMotionToDict(unittest.TestCase):
+
+    def test_returns_a_plain_json_safe_snapshot(self):
+        piece = Mock(id=7)
+        motion = Motion(piece, Position(0, 0), Position(0, 1), Position(0, 2),
+                         start_time=0, duration=1000, kind=MOTION_TRANSLATE, sequence=3)
+        motion.update(250)
+
+        self.assertEqual(motion.to_dict(), {
+            "piece_id": 7,
+            "origin": {"row": 0, "col": 0},
+            "source": {"row": 0, "col": 1},
+            "destination": {"row": 0, "col": 2},
+            "kind": MOTION_TRANSLATE,
+            "sequence": 3,
+            "progress": 0.25,
+        })
 
 
 if __name__ == "__main__":
