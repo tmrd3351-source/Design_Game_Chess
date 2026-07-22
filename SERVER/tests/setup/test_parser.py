@@ -155,23 +155,23 @@ class TestBuildBoardIsolatedFromModelClasses(unittest.TestCase):
     verifying build_board's own contract without depending on the real
     model implementations (already covered by tests/model)."""
 
-    @patch("setup.parser.Position")
-    @patch("setup.parser.Piece")
-    @patch("setup.parser.Board")
+    @patch("SERVER.setup.parser.Position")
+    @patch("SERVER.setup.parser.Piece")
+    @patch("SERVER.setup.parser.Board")
     def test_constructs_board_with_row_and_col_counts(self, board_cls, piece_cls, position_cls):
         build_board([["wK", "."]])
         board_cls.assert_called_once_with(1, 2)
 
-    @patch("setup.parser.Position")
-    @patch("setup.parser.Piece")
-    @patch("setup.parser.Board")
+    @patch("SERVER.setup.parser.Position")
+    @patch("SERVER.setup.parser.Piece")
+    @patch("SERVER.setup.parser.Board")
     def test_skips_piece_construction_for_empty_cells(self, board_cls, piece_cls, position_cls):
         build_board([[".", "."]])
         piece_cls.assert_not_called()
 
-    @patch("setup.parser.Position")
-    @patch("setup.parser.Piece")
-    @patch("setup.parser.Board")
+    @patch("SERVER.setup.parser.Position")
+    @patch("SERVER.setup.parser.Piece")
+    @patch("SERVER.setup.parser.Board")
     def test_constructs_piece_with_id_color_kind_and_position(self, board_cls, piece_cls, position_cls):
         position_cls.return_value = Mock(name="position(0,1)")
 
@@ -180,9 +180,9 @@ class TestBuildBoardIsolatedFromModelClasses(unittest.TestCase):
         position_cls.assert_called_once_with(0, 1)
         piece_cls.assert_called_once_with(0, "b", "N", position_cls.return_value)
 
-    @patch("setup.parser.Position")
-    @patch("setup.parser.Piece")
-    @patch("setup.parser.Board")
+    @patch("SERVER.setup.parser.Position")
+    @patch("SERVER.setup.parser.Piece")
+    @patch("SERVER.setup.parser.Board")
     def test_adds_every_constructed_piece_to_the_board(self, board_cls, piece_cls, position_cls):
         board_instance = Mock()
         board_cls.return_value = board_instance
