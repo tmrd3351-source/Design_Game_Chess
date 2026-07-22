@@ -1,7 +1,7 @@
-from SHARED.config.constants import MOVE_TIME, MOTION_TRANSLATE, MOTION_JUMP
+from SERVER.config.constants import MOVE_TIME, MOTION_TRANSLATE, MOTION_JUMP
 from SERVER.engine.route import compute_route
-from SHARED.model.motion import Motion
-from SHARED.model.move_result import MoveResult
+from SERVER.model.motion import Motion
+from SERVER.model.move_result import MoveResult
 
 #מנהל את הזמן של המשחק מקבל פקודות מהמשתמש ומתחיל תנועות
 class GameEngine:
@@ -15,15 +15,6 @@ class GameEngine:
 
     def inside_board(self, position):
         return self.board.inside_bounds(position)
-
-    def can_select(self, position):
-        piece = self.board.get_piece(position)
-        return piece is not None and not self.arbiter.is_source_busy(position)
-
-    def is_same_side(self, source, target):
-        source_piece = self.board.get_piece(source)
-        target_piece = self.board.get_piece(target)
-        return target_piece is not None and target_piece.get_color() == source_piece.get_color()
 
     def _next_sequence(self):
         self._sequence_counter += 1

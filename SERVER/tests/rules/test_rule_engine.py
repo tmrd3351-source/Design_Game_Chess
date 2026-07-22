@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from SHARED.model.position import Position
-from SHARED.model.move_result import MoveResult
+from SERVER.model.position import Position
+from SERVER.model.move_result import MoveResult
 from SERVER.rules.rule_engine import RuleEngine, DEFAULT_RULES
 from SERVER.rules.piece_rules import KingRule, QueenRule, BishopRule, KnightRule, RookRule, PawnRule
 
@@ -152,8 +152,8 @@ class TestRuleEngineIntegration(unittest.TestCase):
     a real Board/Piece, to confirm the wiring (not just the mocked contract)."""
 
     def test_legal_rook_move_on_real_board(self):
-        from SHARED.model.board import Board
-        from SHARED.model.piece import Piece
+        from SERVER.model.board import Board
+        from SERVER.model.piece import Piece
 
         board = Board(3, 3)
         piece = Piece(0, "w", "R", Position(0, 0))
@@ -165,8 +165,8 @@ class TestRuleEngineIntegration(unittest.TestCase):
         self.assertTrue(result.is_valid)
 
     def test_illegal_bishop_move_on_real_board(self):
-        from SHARED.model.board import Board
-        from SHARED.model.piece import Piece
+        from SERVER.model.board import Board
+        from SERVER.model.piece import Piece
 
         board = Board(3, 3)
         piece = Piece(0, "w", "B", Position(0, 0))

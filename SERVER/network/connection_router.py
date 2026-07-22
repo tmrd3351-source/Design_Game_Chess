@@ -1,4 +1,4 @@
-from SHARED.model.position import Position
+from SERVER.model.position import Position
 from SHARED.network.protocol import (
     LoginCommand, RegisterCommand, PlayCommand, CreateRoomCommand, JoinRoomCommand, MoveCommand, GetStateCommand,
     CheckReconnectCommand, LoginSucceeded, LoginFailed, RegisterSucceeded, RegisterFailed, GameStarted, Waiting,

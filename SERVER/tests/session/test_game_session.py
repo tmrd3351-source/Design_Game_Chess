@@ -7,7 +7,7 @@ from SERVER.events.event_types import (
     PLAYER_JOINED, GAME_STARTED, MOVE_COMPLETED, GAME_ENDED,
     PLAYER_DISCONNECTED, PLAYER_RECONNECTED,
 )
-from SHARED.model.position import Position
+from SERVER.model.position import Position
 
 
 def make_session(room_id="abc123"):

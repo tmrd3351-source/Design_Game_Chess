@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import Mock
 
-from SHARED.config.constants import MOVE_TIME, MOTION_TRANSLATE, MOTION_JUMP
-from SHARED.model.position import Position
-from SHARED.model.move_result import MoveResult
+from SERVER.config.constants import MOVE_TIME, MOTION_TRANSLATE, MOTION_JUMP
+from SERVER.model.position import Position
+from SERVER.model.move_result import MoveResult
 from SERVER.engine.game_engine import GameEngine
 
 
@@ -47,69 +47,6 @@ class TestInsideBoard(unittest.TestCase):
         engine, board, *_ = make_engine()
         board.inside_bounds.return_value = False
         self.assertFalse(engine.inside_board(Mock()))
-
-
-class TestCanSelect(unittest.TestCase):
-
-    def test_true_when_piece_present_and_not_busy(self):
-        engine, board, _, arbiter = make_engine()
-        board.get_piece.return_value = Mock()
-        arbiter.is_source_busy.return_value = False
-        self.assertTrue(engine.can_select(Mock()))
-
-    def test_false_when_piece_present_but_busy(self):
-        engine, board, _, arbiter = make_engine()
-        board.get_piece.return_value = Mock()
-        arbiter.is_source_busy.return_value = True
-        self.assertFalse(engine.can_select(Mock()))
-
-    def test_false_when_no_piece_present(self):
-        engine, board, _, arbiter = make_engine()
-        board.get_piece.return_value = None
-        self.assertFalse(engine.can_select(Mock()))
-
-    def test_busy_check_is_short_circuited_when_no_piece_present(self):
-        engine, board, _, arbiter = make_engine()
-        board.get_piece.return_value = None
-        engine.can_select(Mock())
-        arbiter.is_source_busy.assert_not_called()
-
-
-class TestIsSameSide(unittest.TestCase):
-
-    def test_true_when_target_piece_matches_source_color(self):
-        engine, board, *_ = make_engine()
-        source_piece = Mock()
-        source_piece.get_color.return_value = "w"
-        target_piece = Mock()
-        target_piece.get_color.return_value = "w"
-        board.get_piece.side_effect = [source_piece, target_piece]
-
-        self.assertTrue(engine.is_same_side(Mock(), Mock()))
-
-    def test_false_when_target_piece_is_enemy_color(self):
-        engine, board, *_ = make_engine()
-        source_piece = Mock()
-        source_piece.get_color.return_value = "w"
-        target_piece = Mock()
-        target_piece.get_color.return_value = "b"
-        board.get_piece.side_effect = [source_piece, target_piece]
-
-        self.assertFalse(engine.is_same_side(Mock(), Mock()))
-
-    def test_false_when_target_square_is_empty(self):
-        engine, board, *_ = make_engine()
-        source_piece = Mock()
-        board.get_piece.side_effect = [source_piece, None]
-
-        self.assertFalse(engine.is_same_side(Mock(), Mock()))
-
-    def test_color_check_is_short_circuited_when_target_square_is_empty(self):
-        # source_piece.get_color() is never reached when target_piece is
-        # None, so a missing/empty source piece would not raise here.
-        engine, board, *_ = make_engine()
-        board.get_piece.side_effect = [None, None]
-        self.assertFalse(engine.is_same_side(Mock(), Mock()))
 
 
 class TestRequestMove(unittest.TestCase):

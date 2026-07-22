@@ -1,7 +1,7 @@
 import unittest
 
-from SHARED.controller.board_mapper import BoardMapper
-from SHARED.config.constants import CELL_SIZE
+from CLIENT.gui.board_mapper import BoardMapper
+from CLIENT.config.constants import CELL_SIZE
 
 
 class TestBoardMapper(unittest.TestCase):

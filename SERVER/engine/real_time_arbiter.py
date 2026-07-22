@@ -1,6 +1,6 @@
-from SHARED.model.motion import Motion
-from SHARED.model.cooldown import Cooldown
-from SHARED.config.constants import (
+from SERVER.model.motion import Motion
+from SERVER.model.cooldown import Cooldown
+from SERVER.config.constants import (
     MOVE_COOLDOWN_TIME, JUMP_COOLDOWN_TIME, REST_NONE, REST_SHORT, REST_LONG,
     STATE_IDLE, STATE_MOVING, STATE_JUMPING, MOTION_TRANSLATE, MOTION_JUMP, PIECE_VALUES,
 )

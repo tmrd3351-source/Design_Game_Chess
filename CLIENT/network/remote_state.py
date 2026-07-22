@@ -1,4 +1,4 @@
-from SHARED.model.position import Position
+from CLIENT.model.position import Position
 
 
 class RemotePiece:

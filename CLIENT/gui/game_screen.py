@@ -2,7 +2,7 @@ import time
 
 import cv2
 
-from SHARED.controller.board_mapper import BoardMapper
+from CLIENT.gui.board_mapper import BoardMapper
 from CLIENT.network.network_session import NetworkSession
 from SHARED.network.protocol import MoveCommand, GetStateCommand, GameStateUpdated
 from CLIENT.network.remote_state import RemoteGameState

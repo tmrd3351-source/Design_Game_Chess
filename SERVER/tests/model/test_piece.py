@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import Mock
 
-from SHARED.config.constants import REST_NONE, REST_SHORT, STATE_IDLE, STATE_MOVING
-from SHARED.model.piece import Piece
-from SHARED.model.position import Position
+from SERVER.config.constants import REST_NONE, REST_SHORT, STATE_IDLE, STATE_MOVING
+from SERVER.model.piece import Piece
+from SERVER.model.position import Position
 
 
 class TestPiece(unittest.TestCase):

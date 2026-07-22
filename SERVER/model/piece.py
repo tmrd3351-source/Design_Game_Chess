@@ -1,4 +1,4 @@
-from SHARED.config.constants import REST_NONE, STATE_IDLE
+from SERVER.config.constants import REST_NONE, STATE_IDLE
 
 
 class Piece:

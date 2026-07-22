@@ -1,4 +1,4 @@
-from SHARED.config.constants import EMPTY_CELL
+from SERVER.config.constants import EMPTY_CELL
 from SERVER.setup.parser import validate, build_board
 from SERVER.setup.board_layout import load_layout, BOARD_CSV_PATH
 

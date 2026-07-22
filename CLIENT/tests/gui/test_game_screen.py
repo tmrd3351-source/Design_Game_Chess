@@ -4,7 +4,7 @@ from unittest.mock import Mock
 from CLIENT.gui.game_screen import GameScreen
 from SHARED.network.protocol import MoveCommand, GameStateUpdated, Waiting
 from CLIENT.network.remote_state import RemoteGameState
-from SHARED.model.position import Position
+from CLIENT.model.position import Position
 
 
 def make_screen(network=None, my_color=None):

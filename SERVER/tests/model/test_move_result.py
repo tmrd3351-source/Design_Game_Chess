@@ -1,6 +1,6 @@
 import unittest
 
-from SHARED.model.move_result import MoveResult
+from SERVER.model.move_result import MoveResult
 
 
 class TestMoveResult(unittest.TestCase):

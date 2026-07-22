@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from SHARED.model.game_state import GameState
-from SHARED.model.position import Position
+from SERVER.model.game_state import GameState
+from SERVER.model.position import Position
 
 
 class TestGameStateConstruction(unittest.TestCase):

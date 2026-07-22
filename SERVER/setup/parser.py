@@ -1,7 +1,7 @@
-from SHARED.config.constants import BOARD_HEADER, COMMANDS_HEADER, EMPTY_CELL, VALID_TOKENS
-from SHARED.model.board import Board
-from SHARED.model.piece import Piece
-from SHARED.model.position import Position
+from SERVER.config.constants import BOARD_HEADER, COMMANDS_HEADER, EMPTY_CELL, VALID_TOKENS
+from SERVER.model.board import Board
+from SERVER.model.piece import Piece
+from SERVER.model.position import Position
 
 
 def parse_input():

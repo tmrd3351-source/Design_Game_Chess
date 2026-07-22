@@ -5,7 +5,6 @@ VALID_TOKENS = {
     "bK", "bQ", "bR", "bB", "bN", "bP"
 }
 
-CELL_SIZE = 100
 MOVE_TIME = 1000
 MOVE_COOLDOWN_TIME = 1000
 JUMP_COOLDOWN_TIME = 500
@@ -13,6 +12,10 @@ JUMP_COOLDOWN_TIME = 500
 BOARD_HEADER = "Board:"
 COMMANDS_HEADER = "Commands:"
 
+# The rest/state/motion values below are also read by CLIENT (duplicated in
+# CLIENT/config/constants.py) - they're part of the wire format the server
+# puts in GameStateUpdated snapshots, which the client matches on to pick
+# animations. Keep both copies' values in sync if they ever change.
 REST_NONE = "NONE"
 REST_SHORT = "SHORT"
 REST_LONG = "LONG"

@@ -2,8 +2,8 @@ import unittest
 from unittest.mock import Mock
 
 from CLIENT.rendering.gui_renderer import GuiRenderer
-from SHARED.config.constants import REST_LONG, REST_NONE
-from SHARED.model.position import Position
+from CLIENT.config.constants import REST_LONG, REST_NONE
+from CLIENT.model.position import Position
 
 
 def make_piece(color, rest_type=REST_LONG):

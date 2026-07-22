@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock
 
-from SHARED.model.cooldown import Cooldown
+from SERVER.model.cooldown import Cooldown
 
 
 class TestCooldownConstruction(unittest.TestCase):

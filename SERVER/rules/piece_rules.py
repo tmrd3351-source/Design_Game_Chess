@@ -1,4 +1,4 @@
-from SHARED.model.position import Position
+from SERVER.model.position import Position
 
 
 def _path_is_clear(board, source, destination):

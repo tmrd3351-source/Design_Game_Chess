@@ -1,12 +1,12 @@
 import unittest
 
 from CLIENT.network.remote_state import RemotePiece, RemoteBoard, RemoteMotion, RemoteGameState
-from SHARED.model.position import Position
-from SHARED.config.constants import STATE_IDLE, REST_NONE, MOTION_TRANSLATE
-from SHARED.model.board import Board
-from SHARED.model.piece import Piece
-from SHARED.model.motion import Motion
-from SHARED.model.game_state import GameState
+from CLIENT.model.position import Position
+from CLIENT.config.constants import STATE_IDLE, REST_NONE, MOTION_TRANSLATE
+from SERVER.model.board import Board
+from SERVER.model.piece import Piece
+from SERVER.model.motion import Motion
+from SERVER.model.game_state import GameState
 
 
 def make_piece_dict(piece_id=1, color="w", kind="K", row=0, col=0):

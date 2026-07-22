@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import Mock
 
-from SHARED.config.constants import MOTION_TRANSLATE, MOTION_JUMP
-from SHARED.model.motion import Motion
-from SHARED.model.position import Position
+from SERVER.config.constants import MOTION_TRANSLATE, MOTION_JUMP
+from SERVER.model.motion import Motion
+from SERVER.model.position import Position
 
 
 class TestMotionConstruction(unittest.TestCase):

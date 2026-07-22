@@ -1,5 +1,5 @@
-from SHARED.config.constants import CELL_SIZE
-from SHARED.model.position import Position
+from CLIENT.config.constants import CELL_SIZE
+from CLIENT.model.position import Position
 
 
 class BoardMapper:

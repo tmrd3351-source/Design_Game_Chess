@@ -1,4 +1,4 @@
-from SHARED.config.constants import REST_SHORT, REST_LONG, STATE_IDLE, STATE_MOVING, STATE_JUMPING
+from CLIENT.config.constants import REST_SHORT, REST_LONG, STATE_IDLE, STATE_MOVING, STATE_JUMPING
 from CLIENT.gui.image import load_animation_config, load_animation_frames
 
 # model.Piece.state (engine-owned: idle/moving/jumping) -> the animation

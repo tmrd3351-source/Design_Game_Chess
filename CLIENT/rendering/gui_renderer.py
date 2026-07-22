@@ -1,7 +1,7 @@
 import time
 
-from SHARED.config.constants import CELL_SIZE, REST_NONE, MOTION_TRANSLATE
-from SHARED.model.position import Position
+from CLIENT.config.constants import CELL_SIZE, REST_NONE, MOTION_TRANSLATE
+from CLIENT.model.position import Position
 from CLIENT.rendering.animation_manager import AnimationManager
 from CLIENT.gui.image import load_board_image, BOARD_PIXELS
 
@@ -145,7 +145,7 @@ class GuiRenderer:
 
 if __name__ == "__main__":
     from SERVER.setup.board_setup import GuiBoardSetup
-    from SHARED.model.game_state import GameState
+    from SERVER.model.game_state import GameState
 
     board = GuiBoardSetup().load()
     if board is not None:

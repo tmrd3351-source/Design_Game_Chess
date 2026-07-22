@@ -1,6 +1,6 @@
 import unittest
 
-from SHARED.model.position import Position
+from SERVER.model.position import Position
 
 
 class TestPosition(unittest.TestCase):

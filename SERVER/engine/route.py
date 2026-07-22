@@ -1,4 +1,4 @@
-from SHARED.model.position import Position
+from SERVER.model.position import Position
 
 SINGLE_STEP_KINDS = {"K", "N"}
 

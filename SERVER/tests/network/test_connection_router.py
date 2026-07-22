@@ -7,7 +7,7 @@ from SHARED.network.protocol import (
     CheckReconnectCommand, LoginSucceeded, LoginFailed, RegisterSucceeded, RegisterFailed, GameStarted, Waiting,
     PlayFailed, RoomCreated, RoomJoined, RoomJoinFailed, GameStateUpdated, ReconnectAvailable, NoReconnectAvailable,
 )
-from SHARED.model.position import Position
+from SERVER.model.position import Position
 
 
 def make_router():
@@ -437,7 +437,7 @@ class TestEndToEndThroughRealGameManagerAndController(unittest.TestCase):
 
     def test_a_legal_move_actually_moves_the_piece_on_the_real_board(self):
         from SERVER.session.game_manager import GameManager
-        from SHARED.model.position import Position as RealPosition
+        from SERVER.model.position import Position as RealPosition
 
         game_manager = GameManager()
         router = ConnectionRouter(game_manager, Mock(), Mock())

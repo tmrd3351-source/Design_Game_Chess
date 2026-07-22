@@ -1,4 +1,4 @@
-from SHARED.config.constants import MOTION_TRANSLATE
+from SERVER.config.constants import MOTION_TRANSLATE
 
 
 class Motion:

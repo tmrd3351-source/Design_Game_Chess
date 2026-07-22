@@ -1,4 +1,4 @@
-from SHARED.model.move_result import MoveResult
+from SERVER.model.move_result import MoveResult
 from SERVER.rules.piece_rules import KingRule, QueenRule, BishopRule, KnightRule, RookRule, PawnRule
 #To receive a request for a move and decide whether it is legal according to the rules of the game.
 

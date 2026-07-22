@@ -2,14 +2,14 @@ import itertools
 import unittest
 from unittest.mock import Mock
 
-from SHARED.config.constants import (
+from SERVER.config.constants import (
     MOVE_COOLDOWN_TIME, JUMP_COOLDOWN_TIME, REST_NONE, REST_SHORT, REST_LONG,
     STATE_IDLE, STATE_MOVING, STATE_JUMPING, MOTION_TRANSLATE, MOTION_JUMP,
 )
-from SHARED.model.board import Board
-from SHARED.model.piece import Piece
-from SHARED.model.position import Position
-from SHARED.model.motion import Motion
+from SERVER.model.board import Board
+from SERVER.model.piece import Piece
+from SERVER.model.position import Position
+from SERVER.model.motion import Motion
 from SERVER.engine.real_time_arbiter import RealTimeArbiter
 
 

@@ -1,6 +1,6 @@
 import unittest
 
-from SHARED.model.position import Position
+from SERVER.model.position import Position
 from SERVER.engine.route import compute_route
 
 

@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import Mock
 
-from SHARED.model.board import Board
-from SHARED.model.piece import Piece
-from SHARED.model.position import Position
+from SERVER.model.board import Board
+from SERVER.model.piece import Piece
+from SERVER.model.position import Position
 from SERVER.rules.piece_rules import (
     KingRule, QueenRule, BishopRule, KnightRule, RookRule, PawnRule,
 )

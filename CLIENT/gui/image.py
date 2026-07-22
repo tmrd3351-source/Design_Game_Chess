@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from CLIENT.gui.canvas import Canvas
-from SHARED.config.constants import CELL_SIZE
+from CLIENT.config.constants import CELL_SIZE
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 ASSETS_DIR = Path(__file__).parent / "assets"

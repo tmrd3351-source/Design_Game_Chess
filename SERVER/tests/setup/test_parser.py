@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch, Mock
 
 from SERVER.setup.parser import parse_input, validate, build_board
-from SHARED.config.constants import VALID_TOKENS
+from SERVER.config.constants import VALID_TOKENS
 
 
 def feed(lines):
