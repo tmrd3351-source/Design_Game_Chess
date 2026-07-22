@@ -1,12 +1,12 @@
 import asyncio
 
-from accounts.auth_service import AuthService
-from accounts.sqlite_user_repository import SqliteUserRepository
-from session.game_manager import GameManager
-from session.matchmaker import Matchmaker
-from session.session_ticker import SessionTicker
-from network.connection_router import ConnectionRouter
-from network.websocket_server import WebSocketServer
+from SERVER.accounts.auth_service import AuthService
+from SERVER.accounts.sqlite_user_repository import SqliteUserRepository
+from SERVER.session.game_manager import GameManager
+from SERVER.session.matchmaker import Matchmaker
+from SERVER.session.session_ticker import SessionTicker
+from SERVER.network.connection_router import ConnectionRouter
+from SERVER.network.websocket_server import WebSocketServer
 
 DB_PATH = "users.db"
 
