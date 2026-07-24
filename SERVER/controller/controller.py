@@ -19,3 +19,6 @@ class Controller:
 
     def handle_move(self, source, destination):
         self.game_engine.request_move(source, destination)
+
+    def handle_jump(self, position):
+        self.game_engine.request_jump(position)

@@ -40,6 +40,16 @@ class MoveCommand:
         self.destination = destination  # (row, col)
 
 
+class JumpCommand:
+    """A piece jumping in place - no destination, just the square it's
+    already on."""
+
+    def __init__(self, username, room_id, position):
+        self.username = username
+        self.room_id = room_id
+        self.position = position  # (row, col)
+
+
 class GetStateCommand:
     """Fetches the current GameStateUpdated for a room without joining it -
     for a spectator who was never seated, JoinRoomCommand would add them as

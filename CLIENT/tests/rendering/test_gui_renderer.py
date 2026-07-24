@@ -107,6 +107,17 @@ class TestDrawScorePanel(unittest.TestCase):
         self.assertEqual(len(move_lines), 1)
         self.assertNotIn("x", move_lines[0].split("->")[1])
 
+    def test_a_jump_entry_is_labeled_as_a_jump_instead_of_an_arrow_to_itself(self):
+        canvas = Mock()
+        jump_entry = make_move(kind="K", source=(1, 1), destination=(1, 1))
+        game_state = Mock(score={"w": 0, "b": 0}, move_log=[jump_entry])
+
+        GuiRenderer().draw_score_panel(canvas, game_state)
+
+        texts = texts_drawn(canvas)
+        self.assertTrue(any("jump" in t and "(1,1)" in t for t in texts))
+        self.assertFalse(any("->" in t for t in texts))
+
     def test_only_the_most_recent_moves_are_shown(self):
         canvas = Mock()
         from CLIENT.rendering.gui_renderer import PANEL_MAX_MOVES_SHOWN

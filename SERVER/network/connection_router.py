@@ -1,8 +1,9 @@
 from SERVER.model.position import Position
 from SHARED.network.protocol import (
-    LoginCommand, RegisterCommand, PlayCommand, CreateRoomCommand, JoinRoomCommand, MoveCommand, GetStateCommand,
-    CheckReconnectCommand, LoginSucceeded, LoginFailed, RegisterSucceeded, RegisterFailed, GameStarted, Waiting,
-    PlayFailed, RoomCreated, RoomJoined, RoomJoinFailed, GameStateUpdated, ReconnectAvailable, NoReconnectAvailable,
+    LoginCommand, RegisterCommand, PlayCommand, CreateRoomCommand, JoinRoomCommand, MoveCommand, JumpCommand,
+    GetStateCommand, CheckReconnectCommand, LoginSucceeded, LoginFailed, RegisterSucceeded, RegisterFailed,
+    GameStarted, Waiting, PlayFailed, RoomCreated, RoomJoined, RoomJoinFailed, GameStateUpdated,
+    ReconnectAvailable, NoReconnectAvailable,
 )
 
 
@@ -24,6 +25,7 @@ class ConnectionRouter:
             CreateRoomCommand: self._handle_create_room,
             JoinRoomCommand: self._handle_join_room,
             MoveCommand: self._handle_move,
+            JumpCommand: self._handle_jump,
             GetStateCommand: self._handle_get_state,
             CheckReconnectCommand: self._handle_check_reconnect,
         }
@@ -79,6 +81,21 @@ class ConnectionRouter:
         # and GAME_ENDED are only published once time actually advances far
         # enough for it to land, via GameSession.advance() (SessionTicker).
         return GameStateUpdated(session.room_id, session.controller.get_state())
+
+    def _handle_jump(self, command):
+        session = self.game_manager.join_session(command.room_id)
+        if session is None:
+            return None
+        position = Position(*command.position)
+        if self._is_legal_jump_attempt(session, command.username, position):
+            session.controller.handle_jump(position)
+        return GameStateUpdated(session.room_id, session.controller.get_state())
+
+    def _is_legal_jump_attempt(self, session, username, position):
+        board = session.controller.game_engine.board
+        if not board.inside_bounds(position):
+            return False
+        return self._owns_piece_at(session, username, position)
 
     def _is_legal_attempt(self, session, username, source, destination):
         # Never trust a MoveCommand's coordinates - an out-of-bounds source

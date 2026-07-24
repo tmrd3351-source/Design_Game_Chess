@@ -58,5 +58,17 @@ class TestHandleMove(unittest.TestCase):
         game_engine.request_move.assert_called_once_with(source, destination)
 
 
+class TestHandleJump(unittest.TestCase):
+
+    def test_delegates_to_game_engine_request_jump_with_the_position(self):
+        game_engine = Mock()
+        controller = Controller(game_engine)
+        position = Mock()
+
+        controller.handle_jump(position)
+
+        game_engine.request_jump.assert_called_once_with(position)
+
+
 if __name__ == "__main__":
     unittest.main()

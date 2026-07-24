@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from unittest.mock import Mock
 
 from SERVER.accounts.auth_service import AuthService
 from SERVER.accounts.sqlite_user_repository import SqliteUserRepository
@@ -113,7 +114,17 @@ class TestWebSocketServer(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(response, RoomJoinFailed)
         self.assertEqual(response.reason, "room_not_found")
 
-    async def test_a_move_broadcasts_to_both_connections_once_it_lands(self):
+    async def _receive_until_landed(self, client, max_messages=50):
+        """Drains GameStateUpdated pushes (now sent every ~100ms tick while
+        something's in flight, not just once on landing) until one arrives
+        with no pending motions."""
+        for _ in range(max_messages):
+            update = await asyncio.wait_for(client.receive(), timeout=5)
+            if isinstance(update, GameStateUpdated) and not update.state["motions"]:
+                return update
+        self.fail("motion never landed within max_messages broadcasts")
+
+    async def test_a_move_broadcasts_continuously_while_in_flight_then_lands_for_both_connections(self):
         alice = await self.make_client()
         bob = await self.make_client()
 
@@ -130,15 +141,34 @@ class TestWebSocketServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(immediate_reply.state["motions"]), 1)
 
         # The server ticks every 100ms; MOVE_TIME is 1000ms, so give it a
-        # few seconds of real wall-clock time for the motion to land and
-        # NetworkPublisher to broadcast the result to both connections.
-        alice_broadcast = await asyncio.wait_for(alice.receive(), timeout=5)
-        bob_broadcast = await asyncio.wait_for(bob.receive(), timeout=5)
+        # few seconds of real wall-clock time for the motion to land.
+        alice_landed = await self._receive_until_landed(alice)
+        bob_landed = await self._receive_until_landed(bob)
 
-        self.assertIsInstance(alice_broadcast, GameStateUpdated)
-        self.assertIsInstance(bob_broadcast, GameStateUpdated)
-        self.assertEqual(alice_broadcast.state["motions"], [])
-        self.assertEqual(bob_broadcast.state["motions"], [])
+        self.assertEqual(alice_landed.state["motions"], [])
+        self.assertEqual(bob_landed.state["motions"], [])
+
+    async def test_broadcasts_arrive_continuously_while_a_move_is_still_in_flight(self):
+        # The whole point of ticking every 100ms instead of only on landing:
+        # a client sees the motion's progress advance, not a single frozen
+        # frame followed by a jump straight to the landed position.
+        alice = await self.make_client()
+        bob = await self.make_client()
+
+        await alice.send_command(CreateRoomCommand("alice"))
+        created = await alice.receive()
+        await bob.send_command(JoinRoomCommand("bob", created.room_id))
+        await bob.receive()
+        await alice.receive()
+
+        await alice.send_command(MoveCommand("alice", created.room_id, (6, 0), (5, 0)))
+        await alice.receive()  # immediate reply, progress == 0.0
+
+        next_update = await asyncio.wait_for(alice.receive(), timeout=1)
+
+        self.assertIsInstance(next_update, GameStateUpdated)
+        self.assertEqual(len(next_update.state["motions"]), 1)
+        self.assertGreater(next_update.state["motions"][0]["progress"], 0.0)
 
     async def test_matchmaking_notifies_the_already_waiting_player_too(self):
         # alice's PlayCommand only gets Waiting() as its direct reply - she's
@@ -275,6 +305,76 @@ class TestReconnectAfterDisconnect(unittest.IsolatedAsyncioTestCase):
         response = await late_client.receive()
 
         self.assertIsInstance(response, NoReconnectAvailable)
+
+
+class TestBroadcastActiveRooms(unittest.TestCase):
+    """_broadcast_active_rooms is plain synchronous logic - it decides which
+    rooms need a push, then hands off to _broadcast (mocked out here) to
+    actually send anything, so these don't need a real socket/event loop."""
+
+    def make_server(self):
+        game_manager = Mock()
+        server = WebSocketServer(Mock(), game_manager, Mock(), port=0)
+        server._broadcast = Mock()
+        return server, game_manager
+
+    def test_skips_rooms_with_no_tracked_connections(self):
+        server, game_manager = self.make_server()
+
+        server._broadcast_active_rooms()
+
+        game_manager.join_session.assert_not_called()
+        server._broadcast.assert_not_called()
+
+    def test_skips_a_room_whose_session_no_longer_exists(self):
+        server, game_manager = self.make_server()
+        server._connections_by_room["room-1"] = {Mock()}
+        game_manager.join_session.return_value = None
+
+        server._broadcast_active_rooms()
+
+        server._broadcast.assert_not_called()
+
+    def test_skips_a_room_with_no_active_motions_or_cooldowns(self):
+        server, game_manager = self.make_server()
+        server._connections_by_room["room-1"] = {Mock()}
+        session = Mock()
+        session.controller.game_engine.arbiter.motions = []
+        session.controller.game_engine.arbiter.cooldowns = []
+        game_manager.join_session.return_value = session
+
+        server._broadcast_active_rooms()
+
+        server._broadcast.assert_not_called()
+
+    def test_broadcasts_a_room_with_an_active_motion(self):
+        server, game_manager = self.make_server()
+        server._connections_by_room["room-1"] = {Mock()}
+        session = Mock()
+        session.controller.game_engine.arbiter.motions = [Mock()]
+        session.controller.game_engine.arbiter.cooldowns = []
+        session.controller.get_state.return_value = "the_state"
+        game_manager.join_session.return_value = session
+
+        server._broadcast_active_rooms()
+
+        server._broadcast.assert_called_once()
+        room_id, response = server._broadcast.call_args.args
+        self.assertEqual(room_id, "room-1")
+        self.assertIsInstance(response, GameStateUpdated)
+        self.assertEqual(response.state, "the_state")
+
+    def test_broadcasts_a_room_with_an_active_cooldown_even_with_no_motions(self):
+        server, game_manager = self.make_server()
+        server._connections_by_room["room-1"] = {Mock()}
+        session = Mock()
+        session.controller.game_engine.arbiter.motions = []
+        session.controller.game_engine.arbiter.cooldowns = [Mock()]
+        game_manager.join_session.return_value = session
+
+        server._broadcast_active_rooms()
+
+        server._broadcast.assert_called_once()
 
 
 if __name__ == "__main__":

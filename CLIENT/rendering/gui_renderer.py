@@ -135,9 +135,12 @@ class GuiRenderer:
     def _format_move(self, index, entry):
         label = COLOR_LABELS.get(entry["color"], entry["color"])
         source, destination = entry["source"], entry["destination"]
-        line = (f"{index}. {label} {entry['kind']} "
-                f"({source.get_row()},{source.get_col()})->"
-                f"({destination.get_row()},{destination.get_col()})")
+        if source.equals(destination):
+            line = f"{index}. {label} {entry['kind']} jump @ ({source.get_row()},{source.get_col()})"
+        else:
+            line = (f"{index}. {label} {entry['kind']} "
+                    f"({source.get_row()},{source.get_col()})->"
+                    f"({destination.get_row()},{destination.get_col()})")
         if entry["captured"]:
             line += f" x{','.join(entry['captured'])}"
         return line

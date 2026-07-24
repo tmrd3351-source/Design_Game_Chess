@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import Mock
 
 from CLIENT.gui.game_screen import GameScreen
-from SHARED.network.protocol import MoveCommand, GameStateUpdated, Waiting
+from SHARED.network.protocol import MoveCommand, JumpCommand, GameStateUpdated, Waiting
 from CLIENT.network.remote_state import RemoteGameState
 from CLIENT.model.position import Position
 
@@ -157,6 +157,42 @@ class TestHandleClick(unittest.TestCase):
         screen.handle_click(Position(6, 0))
 
         screen.handle_click(Position(0, 9))
+
+        self.assertTrue(screen.selected.equals(Position(6, 0)))
+        network.send.assert_not_called()
+
+
+class TestHandleRightClick(unittest.TestCase):
+
+    def test_right_click_with_nothing_selected_does_nothing(self):
+        network = Mock()
+        screen = make_screen(network)
+
+        screen.handle_right_click(Position(6, 0))
+
+        network.send.assert_not_called()
+
+    def test_right_click_on_the_selected_square_sends_a_jump_command_and_clears_selection(self):
+        network = Mock()
+        screen = make_screen(network)
+        screen.handle_click(Position(6, 0))
+
+        screen.handle_right_click(Position(6, 0))
+
+        self.assertIsNone(screen.selected)
+        network.send.assert_called_once()
+        sent = network.send.call_args.args[0]
+        self.assertIsInstance(sent, JumpCommand)
+        self.assertEqual(sent.username, "alice")
+        self.assertEqual(sent.room_id, "room-1")
+        self.assertEqual(sent.position, (6, 0))
+
+    def test_right_click_on_a_different_square_than_selected_does_nothing(self):
+        network = Mock()
+        screen = make_screen(network)
+        screen.handle_click(Position(6, 0))
+
+        screen.handle_right_click(Position(5, 0))
 
         self.assertTrue(screen.selected.equals(Position(6, 0)))
         network.send.assert_not_called()

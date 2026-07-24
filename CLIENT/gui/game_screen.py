@@ -4,7 +4,7 @@ import cv2
 
 from CLIENT.gui.board_mapper import BoardMapper
 from CLIENT.network.network_session import NetworkSession
-from SHARED.network.protocol import MoveCommand, GetStateCommand, GameStateUpdated
+from SHARED.network.protocol import MoveCommand, JumpCommand, GetStateCommand, GameStateUpdated
 from CLIENT.network.remote_state import RemoteGameState
 from CLIENT.rendering.gui_renderer import GuiRenderer
 from CLIENT.gui.image import BOARD_SIDE
@@ -26,7 +26,8 @@ class GameScreen:
     second click sends a move attempt from there - there's no client-side
     legality/ownership check (which color is "mine" isn't even known here),
     the server is the sole arbiter and illegal attempts just don't change
-    anything on the next update."""
+    anything on the next update. Right-clicking the already-selected square
+    sends a jump attempt (in place) instead of a move."""
 
     def __init__(self, username, room_id, my_color=None, server_uri=None, network=None, renderer=None, board_mapper=None):
         self.username = username
@@ -67,6 +68,8 @@ class GameScreen:
     def on_mouse(self, event, x, y, _flags, _param):
         if event == cv2.EVENT_LBUTTONDOWN:
             self.handle_click(self.board_mapper.to_position(x, y))
+        elif event == cv2.EVENT_RBUTTONDOWN:
+            self.handle_right_click(self.board_mapper.to_position(x, y))
 
     def handle_click(self, position):
         # The window is wider than the board itself (there's a score/move
@@ -85,6 +88,19 @@ class GameScreen:
             self.username, self.room_id,
             (source.get_row(), source.get_col()),
             (position.get_row(), position.get_col()),
+        ))
+
+    def handle_right_click(self, position):
+        # Jumping only makes sense on the piece you already have selected -
+        # a right-click anywhere else (or with nothing selected) is a no-op.
+        if self.selected is None or not position.equals(self.selected):
+            return
+
+        source = self.selected
+        self.selected = None
+        self.network.send(JumpCommand(
+            self.username, self.room_id,
+            (source.get_row(), source.get_col()),
         ))
 
     def show(self, canvas):

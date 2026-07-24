@@ -244,6 +244,22 @@ class TestResolveJumpMotion(unittest.TestCase):
         self.assertEqual(piece.get_state(), STATE_IDLE)
         self.assertEqual(board.get_piece(Position(1, 1)), piece)
 
+    def test_jump_motion_is_recorded_in_the_move_log(self):
+        arbiter, board, rule_engine = make_arbiter()
+        piece = make_piece("w", "K", 1, 1)
+        board.add_piece(piece)
+        arbiter.schedule(jump_motion(piece, Position(1, 1), start_time=0, duration=1000))
+
+        arbiter.advance(1000)
+
+        self.assertEqual(len(arbiter.move_log), 1)
+        entry = arbiter.move_log[0]
+        self.assertEqual(entry["color"], "w")
+        self.assertEqual(entry["kind"], "K")
+        self.assertTrue(entry["source"].equals(Position(1, 1)))
+        self.assertTrue(entry["destination"].equals(Position(1, 1)))
+        self.assertEqual(entry["captured"], [])
+
 
 class TestResolveGhostMotion(unittest.TestCase):
 

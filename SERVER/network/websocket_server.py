@@ -59,6 +59,24 @@ class WebSocketServer:
         while True:
             await asyncio.sleep(TICK_INTERVAL_SECONDS)
             self.session_ticker.tick()
+            self._broadcast_active_rooms()
+
+    def _broadcast_active_rooms(self):
+        # NetworkPublisher only broadcasts on MOVE_COMPLETED (a motion
+        # landing) - without this, a client sees one snapshot when a move/
+        # jump is scheduled and the next only once it lands, so anything
+        # that should animate continuously in between (the sliding piece,
+        # the cooldown bar draining) would sit frozen. Broadcasting every
+        # tick while a room has something actually in flight keeps clients
+        # updated at the same ~100ms granularity the arbiter itself ticks at.
+        for room_id in list(self._connections_by_room.keys()):
+            session = self.game_manager.join_session(room_id)
+            if session is None:
+                continue
+            arbiter = session.controller.game_engine.arbiter
+            if not arbiter.motions and not arbiter.cooldowns:
+                continue
+            self._broadcast(room_id, GameStateUpdated(room_id, session.controller.get_state()))
 
     async def _handle_connection(self, websocket):
         try:

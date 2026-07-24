@@ -71,6 +71,10 @@ class RealTimeArbiter:
             piece.set_state(STATE_IDLE)
             self._start_cooldown(piece, motion.origin,
                                   motion.start_time + motion.duration, JUMP_COOLDOWN_TIME, REST_SHORT)
+            self.move_log.append({
+                "color": piece.get_color(), "kind": piece.get_kind(),
+                "source": motion.origin, "destination": motion.origin, "captured": [],
+            })
             return
 
         if self.board.get_piece(motion.origin) is not piece:
