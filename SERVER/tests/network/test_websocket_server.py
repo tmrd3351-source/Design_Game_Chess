@@ -422,23 +422,6 @@ class TestBroadcastActiveRooms(unittest.TestCase):
 
         server._broadcast.assert_not_called()
 
-    def test_skips_a_room_already_broadcast_this_tick_by_something_else(self):
-        # A motion landing always starts a fresh cooldown, so without this
-        # check a landing would get broadcast twice in the same tick: once
-        # by NetworkPublisher (MOVE_COMPLETED), once here right after.
-        server, game_manager = self.make_server()
-        server._connections_by_room["room-1"] = {Mock()}
-        server._rooms_broadcast_this_tick.add("room-1")
-        session = Mock()
-        session.controller.game_engine.arbiter.motions = [Mock()]
-        session.controller.game_engine.arbiter.cooldowns = [Mock()]
-        game_manager.get_session.return_value = session
-
-        server._broadcast_active_rooms()
-
-        game_manager.get_session.assert_not_called()
-        server._broadcast.assert_not_called()
-
     def test_broadcasts_a_room_with_an_active_motion(self):
         server, game_manager = self.make_server()
         server._connections_by_room["room-1"] = {Mock()}
@@ -467,6 +450,86 @@ class TestBroadcastActiveRooms(unittest.TestCase):
         server._broadcast_active_rooms()
 
         server._broadcast.assert_called_once()
+
+
+class TestBroadcast(unittest.IsolatedAsyncioTestCase):
+    """_broadcast dedupes by actual serialized content, not "already
+    broadcast this room this tick" - a disconnect-forfeit's GAME_ENDED fires
+    from its own independent asyncio timer (not the tick loop), so it can
+    land in the same ~100ms window as an unrelated broadcast for the same
+    room. Content comparison guarantees a message carrying genuinely new
+    information is never the one silently dropped - only a byte-identical
+    repeat ever is. (_broadcast fires sends via asyncio.create_task, so
+    these need a running loop and a moment for those tasks to complete.)"""
+
+    def make_server(self):
+        return WebSocketServer(Mock(), Mock(), Mock(), port=0)
+
+    async def test_sends_to_every_connection_tracked_under_the_room(self):
+        server = self.make_server()
+        ws_a, ws_b = Mock(), Mock()
+        server._connections_by_room["room-1"] = {ws_a, ws_b}
+        sent = []
+
+        async def fake_safe_send(websocket, message):
+            sent.append(websocket)
+        server._safe_send = fake_safe_send
+
+        server._broadcast("room-1", GameStateUpdated("room-1", "state_a"))
+        await asyncio.sleep(0)
+
+        self.assertEqual(set(sent), {ws_a, ws_b})
+
+    async def test_an_identical_second_broadcast_to_the_same_room_is_dropped(self):
+        server = self.make_server()
+        server._connections_by_room["room-1"] = {Mock()}
+        sent = []
+
+        async def fake_safe_send(websocket, message):
+            sent.append(message)
+        server._safe_send = fake_safe_send
+
+        server._broadcast("room-1", GameStateUpdated("room-1", {"motions": [], "game_over": True, "winner": "w"}))
+        server._broadcast("room-1", GameStateUpdated("room-1", {"motions": [], "game_over": True, "winner": "w"}))
+        await asyncio.sleep(0)
+
+        self.assertEqual(len(sent), 1)
+
+    async def test_a_broadcast_with_different_content_is_never_dropped(self):
+        # The exact scenario this guards against: two different events for
+        # the same room in the same tick (e.g. MOVE_COMPLETED then a
+        # forfeit's GAME_ENDED landing moments apart) where the second one
+        # carries genuinely new information - it must always go out.
+        server = self.make_server()
+        server._connections_by_room["room-1"] = {Mock()}
+        sent = []
+
+        async def fake_safe_send(websocket, message):
+            sent.append(message)
+        server._safe_send = fake_safe_send
+
+        server._broadcast("room-1", GameStateUpdated("room-1", {"motions": [], "game_over": False, "winner": None}))
+        server._broadcast("room-1", GameStateUpdated("room-1", {"motions": [], "game_over": True, "winner": "w"}))
+        await asyncio.sleep(0)
+
+        self.assertEqual(len(sent), 2)
+
+    async def test_different_rooms_are_never_deduped_against_each_other(self):
+        server = self.make_server()
+        server._connections_by_room["room-1"] = {Mock()}
+        server._connections_by_room["room-2"] = {Mock()}
+        sent = []
+
+        async def fake_safe_send(websocket, message):
+            sent.append(message)
+        server._safe_send = fake_safe_send
+
+        identical_state = {"motions": [], "game_over": False, "winner": None}
+        server._broadcast("room-1", GameStateUpdated("room-1", identical_state))
+        server._broadcast("room-2", GameStateUpdated("room-2", identical_state))
+        await asyncio.sleep(0)
+
+        self.assertEqual(len(sent), 2)
 
 
 if __name__ == "__main__":

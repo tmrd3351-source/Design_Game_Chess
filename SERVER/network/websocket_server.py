@@ -48,7 +48,7 @@ class WebSocketServer:
         self._connections_by_username = {}
         self._seat_by_connection = {}  # websocket -> (room_id, username)
         self._wired_rooms = set()
-        self._rooms_broadcast_this_tick = set()
+        self._last_broadcast_message = {}  # room_id -> last serialized message sent
 
     async def start(self):
         async with websockets.serve(self._handle_connection, self.host, self.port) as server:
@@ -59,13 +59,6 @@ class WebSocketServer:
     async def _tick_forever(self):
         while True:
             await asyncio.sleep(TICK_INTERVAL_SECONDS)
-            # Reset per-tick so _broadcast_active_rooms (below) can tell
-            # whether NetworkPublisher already pushed this room's state
-            # during session_ticker.tick() (a motion landing always starts
-            # a fresh cooldown, so without this a landing gets broadcast
-            # twice in the same tick: once from MOVE_COMPLETED, once from
-            # the "still has an active cooldown" check right after).
-            self._rooms_broadcast_this_tick = set()
             self.session_ticker.tick()
             self._broadcast_active_rooms()
 
@@ -77,10 +70,10 @@ class WebSocketServer:
         # (the sliding piece, the cooldown bar draining) would sit frozen.
         # Broadcasting every tick while a room has something actually in
         # flight keeps clients updated at the same ~100ms granularity the
-        # arbiter itself ticks at.
+        # arbiter itself ticks at. _broadcast() itself dedupes against
+        # whatever NetworkPublisher may have just sent this same tick, so
+        # nothing here needs to track "did we already touch this room".
         for room_id in list(self._connections_by_room.keys()):
-            if room_id in self._rooms_broadcast_this_tick:
-                continue
             session = self.game_manager.get_session(room_id)
             if session is None:
                 continue
@@ -177,11 +170,18 @@ class WebSocketServer:
         asyncio.create_task(self._safe_send(websocket, serialize(response)))
 
     def _broadcast(self, room_id, response):
-        if room_id in self._rooms_broadcast_this_tick:
+        # Dedup by actual content, not "already broadcast this tick" - a
+        # disconnect-forfeit's GAME_ENDED fires from its own independent
+        # asyncio timer, not the tick loop, so it can land in the same
+        # ~100ms window as an unrelated broadcast for the same room. Content
+        # comparison guarantees a message carrying genuinely new information
+        # (game_over flipping to True, say) is never the one that gets
+        # skipped - only a byte-identical repeat ever is.
+        message = serialize(response)
+        if self._last_broadcast_message.get(room_id) == message:
             return
 
-        self._rooms_broadcast_this_tick.add(room_id)
-        message = serialize(response)
+        self._last_broadcast_message[room_id] = message
         for websocket in list(self._connections_by_room.get(room_id, ())):
             asyncio.create_task(self._safe_send(websocket, message))
 
