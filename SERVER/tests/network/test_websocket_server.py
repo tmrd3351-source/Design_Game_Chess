@@ -88,8 +88,12 @@ class TestWebSocketServer(unittest.IsolatedAsyncioTestCase):
 
     async def test_room_creator_is_pushed_a_notification_once_someone_joins(self):
         # The creator's own CreateRoomCommand reply only has one seat filled
-        # - she's not told the game started until bob actually joins, which
-        # arrives as an unsolicited push on her own connection.
+        # - she's not told the game started until bob actually joins. That
+        # push goes through NetworkPublisher's GAME_STARTED subscription now
+        # (same GameStarted shape the matchmaking flow already used for the
+        # analogous case), not a hand-built RoomJoined - HomeScreen treats
+        # the two identically either way (room_id/color only, never uses
+        # RoomJoined.state).
         alice = await self.make_client()
         bob = await self.make_client()
 
@@ -101,7 +105,7 @@ class TestWebSocketServer(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(bob_reply, RoomJoined)
 
         alice_push = await asyncio.wait_for(alice.receive(), timeout=5)
-        self.assertIsInstance(alice_push, RoomJoined)
+        self.assertIsInstance(alice_push, GameStarted)
         self.assertEqual(alice_push.room_id, created.room_id)
         self.assertEqual(alice_push.color, "w")
 
@@ -169,6 +173,77 @@ class TestWebSocketServer(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(next_update, GameStateUpdated)
         self.assertEqual(len(next_update.state["motions"]), 1)
         self.assertGreater(next_update.state["motions"][0]["progress"], 0.0)
+
+    async def test_a_landing_move_does_not_broadcast_twice_in_the_same_tick(self):
+        # Regression: NetworkPublisher (MOVE_COMPLETED) and the per-tick
+        # "still has an active cooldown" check used to both fire the moment
+        # a move landed - not conflicting (identical content), but a real
+        # duplicate push in the exact same tick. Landing legitimately keeps
+        # being reported every tick afterward as the cooldown drains (that's
+        # the intended continuous animation) - the bug shows up as the first
+        # two "landed" updates carrying the *identical* rest_progress
+        # (no time elapsed between them), instead of the second one showing
+        # a tick's worth of further cooldown drain.
+        alice = await self.make_client()
+        bob = await self.make_client()
+
+        await alice.send_command(CreateRoomCommand("alice"))
+        created = await alice.receive()
+        await bob.send_command(JoinRoomCommand("bob", created.room_id))
+        await bob.receive()
+        await alice.receive()
+
+        await alice.send_command(MoveCommand("alice", created.room_id, (6, 0), (5, 0)))
+
+        rest_progress_values = []
+        for _ in range(30):
+            update = await asyncio.wait_for(alice.receive(), timeout=5)
+            if not isinstance(update, GameStateUpdated) or update.state["motions"]:
+                continue
+            piece = next(p for p in update.state["board"]["pieces"]
+                         if p["position"] == {"row": 5, "col": 0})
+            rest_progress_values.append(piece["rest_progress"])
+            if len(rest_progress_values) >= 2:
+                break
+
+        self.assertEqual(len(rest_progress_values), 2)
+        self.assertNotEqual(rest_progress_values[0], rest_progress_values[1])
+
+    async def test_a_spectator_cannot_move_a_seated_players_piece(self):
+        alice = await self.make_client()
+        bob = await self.make_client()
+        carol = await self.make_client()
+
+        await alice.send_command(CreateRoomCommand("alice"))
+        created = await alice.receive()
+        await bob.send_command(JoinRoomCommand("bob", created.room_id))
+        await bob.receive()
+        await alice.receive()
+
+        await carol.send_command(JoinRoomCommand("carol", created.room_id))
+        await carol.receive()  # joins as a spectator - both seats already taken
+
+        await carol.send_command(MoveCommand("carol", created.room_id, (6, 0), (5, 0)))
+        response = await carol.receive()
+
+        self.assertIsInstance(response, GameStateUpdated)
+        self.assertEqual(response.state["motions"], [])
+
+    async def test_an_out_of_bounds_move_is_rejected_over_a_real_socket(self):
+        alice = await self.make_client()
+        bob = await self.make_client()
+
+        await alice.send_command(CreateRoomCommand("alice"))
+        created = await alice.receive()
+        await bob.send_command(JoinRoomCommand("bob", created.room_id))
+        await bob.receive()
+        await alice.receive()
+
+        await alice.send_command(MoveCommand("alice", created.room_id, (6, 0), (99, 99)))
+        response = await alice.receive()
+
+        self.assertIsInstance(response, GameStateUpdated)
+        self.assertEqual(response.state["motions"], [])
 
     async def test_matchmaking_notifies_the_already_waiting_player_too(self):
         # alice's PlayCommand only gets Waiting() as its direct reply - she's
@@ -323,13 +398,13 @@ class TestBroadcastActiveRooms(unittest.TestCase):
 
         server._broadcast_active_rooms()
 
-        game_manager.join_session.assert_not_called()
+        game_manager.get_session.assert_not_called()
         server._broadcast.assert_not_called()
 
     def test_skips_a_room_whose_session_no_longer_exists(self):
         server, game_manager = self.make_server()
         server._connections_by_room["room-1"] = {Mock()}
-        game_manager.join_session.return_value = None
+        game_manager.get_session.return_value = None
 
         server._broadcast_active_rooms()
 
@@ -341,10 +416,27 @@ class TestBroadcastActiveRooms(unittest.TestCase):
         session = Mock()
         session.controller.game_engine.arbiter.motions = []
         session.controller.game_engine.arbiter.cooldowns = []
-        game_manager.join_session.return_value = session
+        game_manager.get_session.return_value = session
 
         server._broadcast_active_rooms()
 
+        server._broadcast.assert_not_called()
+
+    def test_skips_a_room_already_broadcast_this_tick_by_something_else(self):
+        # A motion landing always starts a fresh cooldown, so without this
+        # check a landing would get broadcast twice in the same tick: once
+        # by NetworkPublisher (MOVE_COMPLETED), once here right after.
+        server, game_manager = self.make_server()
+        server._connections_by_room["room-1"] = {Mock()}
+        server._rooms_broadcast_this_tick.add("room-1")
+        session = Mock()
+        session.controller.game_engine.arbiter.motions = [Mock()]
+        session.controller.game_engine.arbiter.cooldowns = [Mock()]
+        game_manager.get_session.return_value = session
+
+        server._broadcast_active_rooms()
+
+        game_manager.get_session.assert_not_called()
         server._broadcast.assert_not_called()
 
     def test_broadcasts_a_room_with_an_active_motion(self):
@@ -354,7 +446,7 @@ class TestBroadcastActiveRooms(unittest.TestCase):
         session.controller.game_engine.arbiter.motions = [Mock()]
         session.controller.game_engine.arbiter.cooldowns = []
         session.controller.get_state.return_value = "the_state"
-        game_manager.join_session.return_value = session
+        game_manager.get_session.return_value = session
 
         server._broadcast_active_rooms()
 
@@ -370,7 +462,7 @@ class TestBroadcastActiveRooms(unittest.TestCase):
         session = Mock()
         session.controller.game_engine.arbiter.motions = []
         session.controller.game_engine.arbiter.cooldowns = [Mock()]
-        game_manager.join_session.return_value = session
+        game_manager.get_session.return_value = session
 
         server._broadcast_active_rooms()
 

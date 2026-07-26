@@ -16,7 +16,7 @@ class GameManager:
         self.sessions[room_id] = session
         return session
 
-    def join_session(self, room_id):
+    def get_session(self, room_id):
         return self.sessions.get(room_id)
 
     def find_reconnectable_session(self, username):

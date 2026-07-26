@@ -9,6 +9,7 @@ from SHARED.network.protocol import (
     ReconnectAvailable, NoReconnectAvailable,
 )
 from SERVER.model.position import Position
+from SERVER.model.move_result import MoveResult
 
 
 def make_router():
@@ -181,15 +182,15 @@ class TestHandleJoinRoom(unittest.TestCase):
 
     def test_looks_up_the_session_by_room_id(self):
         router, game_manager, *_ = make_router()
-        game_manager.join_session.return_value = Mock(room_id="room-1")
+        game_manager.get_session.return_value = Mock(room_id="room-1")
 
         router.handle(JoinRoomCommand("bob", "room-1"))
 
-        game_manager.join_session.assert_called_once_with("room-1")
+        game_manager.get_session.assert_called_once_with("room-1")
 
     def test_unknown_room_id_returns_room_join_failed_and_joins_nothing(self):
         router, game_manager, *_ = make_router()
-        game_manager.join_session.return_value = None
+        game_manager.get_session.return_value = None
 
         response = router.handle(JoinRoomCommand("bob", "no-such-room"))
 
@@ -199,7 +200,7 @@ class TestHandleJoinRoom(unittest.TestCase):
     def test_joins_the_found_session_with_the_commands_username(self):
         router, game_manager, *_ = make_router()
         session = Mock(room_id="room-1")
-        game_manager.join_session.return_value = session
+        game_manager.get_session.return_value = session
 
         router.handle(JoinRoomCommand("bob", "room-1"))
 
@@ -209,7 +210,7 @@ class TestHandleJoinRoom(unittest.TestCase):
         router, game_manager, *_ = make_router()
         session = Mock(room_id="room-1")
         session.color_of.return_value = "b"
-        game_manager.join_session.return_value = session
+        game_manager.get_session.return_value = session
 
         response = router.handle(JoinRoomCommand("bob", "room-1"))
 
@@ -219,8 +220,8 @@ class TestHandleJoinRoom(unittest.TestCase):
     def test_returns_room_joined_with_the_sessions_current_state(self):
         router, game_manager, *_ = make_router()
         session = Mock(room_id="room-1")
-        session.controller.get_state.return_value = "the_state"
-        game_manager.join_session.return_value = session
+        session.get_state.return_value = "the_state"
+        game_manager.get_session.return_value = session
 
         response = router.handle(JoinRoomCommand("bob", "room-1"))
 
@@ -229,38 +230,39 @@ class TestHandleJoinRoom(unittest.TestCase):
         self.assertEqual(response.state, "the_state")
 
 
-def make_session_owned_by(username, room_id="room-1", color="w"):
-    """A Mock session seated so `username` owns whatever piece sits at the
-    source square used in these tests."""
-    session = Mock(room_id=room_id)
-    session.players = {color: username}
-    session.color_of.side_effect = lambda name: next(
-        (c for c, u in session.players.items() if u == name), None
-    )
-    session.controller.game_engine.board.get_piece.return_value = Mock(
-        get_color=Mock(return_value=color)
-    )
-    return session
-
-
 class TestHandleMove(unittest.TestCase):
+    """ConnectionRouter itself is routing-only now: look up the session,
+    build Positions, delegate to GameSession.request_move(), return the
+    current state. All the "is this a legal attempt" permission logic lives
+    in GameSession (see tests/session/test_game_session.py::TestRequestMove)
+    - the router never inspects ownership, bounds, or the board itself."""
 
-    def test_unknown_room_id_returns_none_and_never_touches_a_controller(self):
+    def test_unknown_room_id_returns_none_and_never_touches_a_session(self):
         router, game_manager, *_ = make_router()
-        game_manager.join_session.return_value = None
+        game_manager.get_session.return_value = None
 
         response = router.handle(MoveCommand("alice", "no-such-room", (0, 0), (0, 1)))
 
         self.assertIsNone(response)
 
-    def test_converts_source_and_destination_tuples_to_positions(self):
+    def test_looks_up_the_session_by_room_id(self):
         router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice")
-        game_manager.join_session.return_value = session
+        session = Mock(room_id="room-1")
+        game_manager.get_session.return_value = session
+
+        router.handle(MoveCommand("alice", "room-1", (0, 0), (0, 1)))
+
+        game_manager.get_session.assert_called_once_with("room-1")
+
+    def test_converts_source_and_destination_tuples_to_positions_and_delegates_to_the_session(self):
+        router, game_manager, *_ = make_router()
+        session = Mock(room_id="room-1")
+        game_manager.get_session.return_value = session
 
         router.handle(MoveCommand("alice", "room-1", (1, 2), (3, 4)))
 
-        source, destination = session.controller.handle_move.call_args.args
+        username, source, destination = session.request_move.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(source, Position)
         self.assertIsInstance(destination, Position)
         self.assertEqual((source.get_row(), source.get_col()), (1, 2))
@@ -268,9 +270,9 @@ class TestHandleMove(unittest.TestCase):
 
     def test_returns_game_state_updated_with_the_sessions_current_state(self):
         router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice")
-        session.controller.get_state.return_value = "the_state"
-        game_manager.join_session.return_value = session
+        session = Mock(room_id="room-1")
+        session.get_state.return_value = "the_state"
+        game_manager.get_session.return_value = session
 
         response = router.handle(MoveCommand("alice", "room-1", (0, 0), (0, 1)))
 
@@ -283,123 +285,67 @@ class TestHandleMove(unittest.TestCase):
         # published later by GameSession.advance() once time actually elapses
         # (see tests/session/test_game_session.py::TestAdvance).
         router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice")
-        session.controller.get_state.return_value = "the_state"
-        game_manager.join_session.return_value = session
+        session = Mock(room_id="room-1")
+        session.get_state.return_value = "the_state"
+        game_manager.get_session.return_value = session
 
         router.handle(MoveCommand("alice", "room-1", (0, 0), (0, 1)))
 
         session.events.publish.assert_not_called()
 
-    def test_moving_the_opponents_piece_never_reaches_the_controller(self):
+    def test_returns_the_current_state_even_when_the_session_rejects_the_move(self):
+        # The router never inspects request_move's return value - a rejected
+        # attempt still gets the current (unchanged) state back, exactly
+        # like a legal one. GameSession is the only one deciding legality.
         router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice", color="w")
-        session.players["b"] = "bob"
-        game_manager.join_session.return_value = session
-
-        router.handle(MoveCommand("bob", "room-1", (0, 0), (0, 1)))
-
-        session.controller.handle_move.assert_not_called()
-
-    def test_moving_the_opponents_piece_still_returns_the_unchanged_state(self):
-        # Rejected moves aren't errors - they just don't change anything, so
-        # the client sees the same state come back on the next update.
-        router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice", color="w")
-        session.players["b"] = "bob"
-        session.controller.get_state.return_value = "the_state"
-        game_manager.join_session.return_value = session
+        session = Mock(room_id="room-1")
+        session.request_move.return_value = MoveResult.illegal("not_your_piece")
+        session.get_state.return_value = "the_state"
+        game_manager.get_session.return_value = session
 
         response = router.handle(MoveCommand("bob", "room-1", (0, 0), (0, 1)))
 
         self.assertIsInstance(response, GameStateUpdated)
         self.assertEqual(response.state, "the_state")
 
-    def test_moving_from_an_empty_square_never_reaches_the_controller(self):
-        router, game_manager, *_ = make_router()
-        session = Mock(room_id="room-1")
-        session.players = {"w": "alice", "b": "bob"}
-        session.controller.game_engine.board.get_piece.return_value = None
-        game_manager.join_session.return_value = session
-
-        router.handle(MoveCommand("alice", "room-1", (0, 0), (0, 1)))
-
-        session.controller.handle_move.assert_not_called()
-
-    def test_a_spectator_can_never_move_anything(self):
-        router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice", color="w")
-        session.players["b"] = "bob"
-        game_manager.join_session.return_value = session
-
-        router.handle(MoveCommand("carol_spectator", "room-1", (0, 0), (0, 1)))
-
-        session.controller.handle_move.assert_not_called()
-
-    def test_an_out_of_bounds_source_never_reaches_the_board(self):
-        # A real Board.get_piece() would raise IndexError on an out-of-range
-        # position - inside_bounds() must be checked before anything touches
-        # the board at all, not just before the ownership lookup.
-        router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice")
-        session.controller.game_engine.board.inside_bounds.return_value = False
-        game_manager.join_session.return_value = session
-
-        router.handle(MoveCommand("alice", "room-1", (99, 99), (0, 1)))
-
-        session.controller.game_engine.board.get_piece.assert_not_called()
-        session.controller.handle_move.assert_not_called()
-
-    def test_an_out_of_bounds_destination_never_reaches_the_controller(self):
-        router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice")
-        real_inside_bounds = lambda position: position.get_row() < 8 and position.get_col() < 8
-        session.controller.game_engine.board.inside_bounds.side_effect = real_inside_bounds
-        game_manager.join_session.return_value = session
-
-        router.handle(MoveCommand("alice", "room-1", (0, 0), (99, 99)))
-
-        session.controller.handle_move.assert_not_called()
-
-    def test_out_of_bounds_move_still_returns_the_unchanged_state(self):
-        router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice")
-        session.controller.game_engine.board.inside_bounds.return_value = False
-        session.controller.get_state.return_value = "the_state"
-        game_manager.join_session.return_value = session
-
-        response = router.handle(MoveCommand("alice", "room-1", (99, 99), (0, 1)))
-
-        self.assertIsInstance(response, GameStateUpdated)
-        self.assertEqual(response.state, "the_state")
-
 
 class TestHandleJump(unittest.TestCase):
+    """Same shape as TestHandleMove - see its docstring."""
 
-    def test_unknown_room_id_returns_none_and_never_touches_a_controller(self):
+    def test_unknown_room_id_returns_none_and_never_touches_a_session(self):
         router, game_manager, *_ = make_router()
-        game_manager.join_session.return_value = None
+        game_manager.get_session.return_value = None
 
         response = router.handle(JumpCommand("alice", "no-such-room", (0, 0)))
 
         self.assertIsNone(response)
 
-    def test_converts_position_tuple_to_a_position(self):
+    def test_looks_up_the_session_by_room_id(self):
         router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice")
-        game_manager.join_session.return_value = session
+        session = Mock(room_id="room-1")
+        game_manager.get_session.return_value = session
+
+        router.handle(JumpCommand("alice", "room-1", (0, 0)))
+
+        game_manager.get_session.assert_called_once_with("room-1")
+
+    def test_converts_position_tuple_to_a_position_and_delegates_to_the_session(self):
+        router, game_manager, *_ = make_router()
+        session = Mock(room_id="room-1")
+        game_manager.get_session.return_value = session
 
         router.handle(JumpCommand("alice", "room-1", (1, 2)))
 
-        (position,) = session.controller.handle_jump.call_args.args
+        username, position = session.request_jump.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(position, Position)
         self.assertEqual((position.get_row(), position.get_col()), (1, 2))
 
     def test_returns_game_state_updated_with_the_sessions_current_state(self):
         router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice")
-        session.controller.get_state.return_value = "the_state"
-        game_manager.join_session.return_value = session
+        session = Mock(room_id="room-1")
+        session.get_state.return_value = "the_state"
+        game_manager.get_session.return_value = session
 
         response = router.handle(JumpCommand("alice", "room-1", (0, 0)))
 
@@ -407,56 +353,14 @@ class TestHandleJump(unittest.TestCase):
         self.assertEqual(response.room_id, "room-1")
         self.assertEqual(response.state, "the_state")
 
-    def test_jumping_the_opponents_piece_never_reaches_the_controller(self):
-        router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice", color="w")
-        session.players["b"] = "bob"
-        game_manager.join_session.return_value = session
-
-        router.handle(JumpCommand("bob", "room-1", (0, 0)))
-
-        session.controller.handle_jump.assert_not_called()
-
-    def test_jumping_an_empty_square_never_reaches_the_controller(self):
+    def test_returns_the_current_state_even_when_the_session_rejects_the_jump(self):
         router, game_manager, *_ = make_router()
         session = Mock(room_id="room-1")
-        session.players = {"w": "alice", "b": "bob"}
-        session.controller.game_engine.board.get_piece.return_value = None
-        game_manager.join_session.return_value = session
+        session.request_jump.return_value = MoveResult.illegal("not_your_piece")
+        session.get_state.return_value = "the_state"
+        game_manager.get_session.return_value = session
 
-        router.handle(JumpCommand("alice", "room-1", (0, 0)))
-
-        session.controller.handle_jump.assert_not_called()
-
-    def test_a_spectator_can_never_jump_anything(self):
-        router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice", color="w")
-        session.players["b"] = "bob"
-        game_manager.join_session.return_value = session
-
-        router.handle(JumpCommand("carol_spectator", "room-1", (0, 0)))
-
-        session.controller.handle_jump.assert_not_called()
-
-    def test_an_out_of_bounds_position_never_reaches_the_board(self):
-        router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice")
-        session.controller.game_engine.board.inside_bounds.return_value = False
-        game_manager.join_session.return_value = session
-
-        router.handle(JumpCommand("alice", "room-1", (99, 99)))
-
-        session.controller.game_engine.board.get_piece.assert_not_called()
-        session.controller.handle_jump.assert_not_called()
-
-    def test_out_of_bounds_jump_still_returns_the_unchanged_state(self):
-        router, game_manager, *_ = make_router()
-        session = make_session_owned_by("alice")
-        session.controller.game_engine.board.inside_bounds.return_value = False
-        session.controller.get_state.return_value = "the_state"
-        game_manager.join_session.return_value = session
-
-        response = router.handle(JumpCommand("alice", "room-1", (99, 99)))
+        response = router.handle(JumpCommand("bob", "room-1", (0, 0)))
 
         self.assertIsInstance(response, GameStateUpdated)
         self.assertEqual(response.state, "the_state")
@@ -466,17 +370,17 @@ class TestHandleGetState(unittest.TestCase):
 
     def test_unknown_room_id_returns_none(self):
         router, game_manager, *_ = make_router()
-        game_manager.join_session.return_value = None
+        game_manager.get_session.return_value = None
 
         response = router.handle(GetStateCommand("no-such-room"))
 
         self.assertIsNone(response)
 
-    def test_returns_game_state_updated_without_joining_or_touching_the_controller(self):
+    def test_returns_game_state_updated_without_joining_or_moving_anything(self):
         router, game_manager, *_ = make_router()
         session = Mock(room_id="room-1")
-        session.controller.get_state.return_value = "the_state"
-        game_manager.join_session.return_value = session
+        session.get_state.return_value = "the_state"
+        game_manager.get_session.return_value = session
 
         response = router.handle(GetStateCommand("room-1"))
 
@@ -484,7 +388,7 @@ class TestHandleGetState(unittest.TestCase):
         self.assertEqual(response.room_id, "room-1")
         self.assertEqual(response.state, "the_state")
         session.join.assert_not_called()
-        session.controller.handle_move.assert_not_called()
+        session.request_move.assert_not_called()
 
 
 class TestHandleCheckReconnect(unittest.TestCase):
@@ -536,7 +440,7 @@ class TestEndToEndThroughRealGameManagerAndController(unittest.TestCase):
 
         # pictures/board.csv puts white's pawns on row 6; a single-step
         # forward move to row 5 is legal and unambiguous either way.
-        board = game_manager.join_session(created.room_id).controller.game_engine.board
+        board = game_manager.get_session(created.room_id).controller.game_engine.board
         piece = board.get_piece(RealPosition(6, 0))
         self.assertIsNotNone(piece)
 
@@ -577,10 +481,10 @@ class TestEndToEndThroughRealGameManagerAndController(unittest.TestCase):
 
         created = router.handle(CreateRoomCommand("alice"))
         router.handle(JoinRoomCommand("bob", created.room_id))
-        session = game_manager.join_session(created.room_id)
+        session = game_manager.get_session(created.room_id)
 
         sent = []
-        NetworkPublisher(session.events, sink=sent.append)
+        NetworkPublisher(session, broadcast=sent.append)
 
         router.handle(MoveCommand("alice", created.room_id, (6, 0), (5, 0)))
         self.assertEqual(sent, [])  # not yet - still mid-flight

@@ -18,7 +18,15 @@ class Controller:
         self.game_engine.wait(ms)
 
     def handle_move(self, source, destination):
-        self.game_engine.request_move(source, destination)
+        return self.game_engine.request_move(source, destination)
 
     def handle_jump(self, position):
-        self.game_engine.request_jump(position)
+        return self.game_engine.request_jump(position)
+
+    def inside_board(self, position):
+        return self.game_engine.inside_board(position)
+
+    def can_control_piece(self, color, position):
+        if not self.game_engine.inside_board(position):
+            return False
+        return self.game_engine.get_piece_color(position) == color

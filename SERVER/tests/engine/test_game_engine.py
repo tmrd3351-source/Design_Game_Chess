@@ -49,6 +49,23 @@ class TestInsideBoard(unittest.TestCase):
         self.assertFalse(engine.inside_board(Mock()))
 
 
+class TestGetPieceColor(unittest.TestCase):
+
+    def test_returns_the_color_of_the_piece_at_the_position(self):
+        engine, board, *_ = make_engine()
+        piece = Mock()
+        piece.get_color.return_value = "w"
+        board.get_piece.return_value = piece
+
+        self.assertEqual(engine.get_piece_color(Position(0, 0)), "w")
+
+    def test_returns_none_when_the_square_is_empty(self):
+        engine, board, *_ = make_engine()
+        board.get_piece.return_value = None
+
+        self.assertIsNone(engine.get_piece_color(Position(0, 0)))
+
+
 class TestRequestMove(unittest.TestCase):
 
     def test_game_over_rejects_without_consulting_rules_or_arbiter_busy_state(self):

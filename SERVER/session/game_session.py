@@ -5,6 +5,7 @@ from SERVER.events.event_types import (
     PLAYER_JOINED, GAME_STARTED, MOVE_COMPLETED, GAME_ENDED,
     PLAYER_DISCONNECTED, PLAYER_RECONNECTED,
 )
+from SERVER.model.move_result import MoveResult
 
 SPECTATOR = "spectator"
 
@@ -24,6 +25,7 @@ class GameSession:
 
     def __init__(self, room_id, controller_factory=None):
         self.room_id = room_id
+        
         self.controller = (controller_factory or _default_controller_factory)()
         self.events = EventBus()
         self.players = {}
@@ -93,6 +95,28 @@ class GameSession:
         arbiter.game_over = True
         arbiter.winner = winner
         self.events.publish(GAME_ENDED, room_id=self.room_id, winner=winner, players=self.players)
+
+    def get_state(self):
+        return self.controller.get_state()
+
+    def request_move(self, username, source, destination):
+        """Room/identity-level gate in front of Controller.handle_move: only
+        checks that `username` is seated and owns the piece at `source`
+        (and that `destination` is at least on the board) - actual move
+        legality is entirely GameEngine/RuleEngine's call, never re-checked
+        here."""
+        color = self.color_of(username)
+        if color is None or not self.controller.can_control_piece(color, source):
+            return MoveResult.illegal("not_your_piece")
+        if not self.controller.inside_board(destination):
+            return MoveResult.illegal("out_of_bounds")
+        return self.controller.handle_move(source, destination)
+
+    def request_jump(self, username, position):
+        color = self.color_of(username)
+        if color is None or not self.controller.can_control_piece(color, position):
+            return MoveResult.illegal("not_your_piece")
+        return self.controller.handle_jump(position)
 
     def advance(self, elapsed_ms):
         """Drives real elapsed time into the underlying Controller/GameEngine

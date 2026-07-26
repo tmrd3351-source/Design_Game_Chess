@@ -5,7 +5,7 @@ import websockets
 from SHARED.network.serialization import serialize, deserialize
 from SERVER.network.network_publisher import NetworkPublisher
 from SHARED.network.protocol import (
-    PlayCommand, CreateRoomCommand, JoinRoomCommand, GameStarted, RoomJoined, GameStateUpdated,
+    PlayCommand, CreateRoomCommand, JoinRoomCommand, GameStarted, GameStateUpdated,
 )
 
 TICK_INTERVAL_SECONDS = 0.1
@@ -48,6 +48,7 @@ class WebSocketServer:
         self._connections_by_username = {}
         self._seat_by_connection = {}  # websocket -> (room_id, username)
         self._wired_rooms = set()
+        self._rooms_broadcast_this_tick = set()
 
     async def start(self):
         async with websockets.serve(self._handle_connection, self.host, self.port) as server:
@@ -58,19 +59,29 @@ class WebSocketServer:
     async def _tick_forever(self):
         while True:
             await asyncio.sleep(TICK_INTERVAL_SECONDS)
+            # Reset per-tick so _broadcast_active_rooms (below) can tell
+            # whether NetworkPublisher already pushed this room's state
+            # during session_ticker.tick() (a motion landing always starts
+            # a fresh cooldown, so without this a landing gets broadcast
+            # twice in the same tick: once from MOVE_COMPLETED, once from
+            # the "still has an active cooldown" check right after).
+            self._rooms_broadcast_this_tick = set()
             self.session_ticker.tick()
             self._broadcast_active_rooms()
 
     def _broadcast_active_rooms(self):
-        # NetworkPublisher only broadcasts on MOVE_COMPLETED (a motion
-        # landing) - without this, a client sees one snapshot when a move/
-        # jump is scheduled and the next only once it lands, so anything
-        # that should animate continuously in between (the sliding piece,
-        # the cooldown bar draining) would sit frozen. Broadcasting every
-        # tick while a room has something actually in flight keeps clients
-        # updated at the same ~100ms granularity the arbiter itself ticks at.
+        # NetworkPublisher only broadcasts on MOVE_COMPLETED/GAME_ENDED (a
+        # motion landing or the game ending) - without this, a client sees
+        # one snapshot when a move/jump is scheduled and the next only once
+        # it lands, so anything that should animate continuously in between
+        # (the sliding piece, the cooldown bar draining) would sit frozen.
+        # Broadcasting every tick while a room has something actually in
+        # flight keeps clients updated at the same ~100ms granularity the
+        # arbiter itself ticks at.
         for room_id in list(self._connections_by_room.keys()):
-            session = self.game_manager.join_session(room_id)
+            if room_id in self._rooms_broadcast_this_tick:
+                continue
+            session = self.game_manager.get_session(room_id)
             if session is None:
                 continue
             arbiter = session.controller.game_engine.arbiter
@@ -92,6 +103,16 @@ class WebSocketServer:
 
     async def _handle_message(self, websocket, message):
         command = deserialize(message)
+
+        if isinstance(command, JoinRoomCommand):
+            # GAME_STARTED can fire from inside session.join() during
+            # handle() below, the moment this join fills the second seat -
+            # unlike a PlayCommand match (whose room doesn't exist until
+            # Matchmaker.find_match() creates it), this room_id is already
+            # known, so the publisher must be wired before that happens,
+            # not after.
+            self._ensure_publisher(command.room_id)
+
         response = self.connection_router.handle(command)
         if isinstance(command, (PlayCommand, CreateRoomCommand, JoinRoomCommand)):
             self._connections_by_username[command.username] = websocket
@@ -109,17 +130,15 @@ class WebSocketServer:
             self._seat_by_connection[websocket] = (room_id, command.username)
 
         if isinstance(response, GameStarted):
+            # A PlayCommand match: the room (and its publisher) didn't exist
+            # before this call, so GAME_STARTED's own unicast never reached
+            # the already-waiting opponent - push it to them directly instead.
             await self._notify_matched_opponent(command.username, response)
-        elif isinstance(response, RoomJoined) and response.color == "b":
-            # color == "b" means this join just filled the second seat -
-            # the room's creator (already connected and waiting) needs to
-            # be told the game started too, same as the matchmaking case.
-            await self._notify_room_creator(command.username, response)
 
         await websocket.send(serialize(response))
 
     async def _notify_matched_opponent(self, matched_username, response):
-        session = self.game_manager.join_session(response.room_id)
+        session = self.game_manager.get_session(response.room_id)
         if session is None:
             return
         for username in session.players.values():
@@ -135,33 +154,33 @@ class WebSocketServer:
             opponent_response = GameStarted(response.room_id, session.color_of(username))
             await self._safe_send(opponent_ws, serialize(opponent_response))
 
-    async def _notify_room_creator(self, joiner_username, response):
-        session = self.game_manager.join_session(response.room_id)
-        if session is None:
-            return
-        for username in session.players.values():
-            if username == joiner_username:
-                continue
-            creator_ws = self._connections_by_username.get(username)
-            if creator_ws is None:
-                continue
-            self._seat_by_connection[creator_ws] = (response.room_id, username)
-            creator_response = RoomJoined(response.room_id, session.color_of(username), response.state)
-            await self._safe_send(creator_ws, serialize(creator_response))
-
     def _track_connection(self, websocket, room_id):
         self._connections_by_room.setdefault(room_id, set()).add(websocket)
 
     def _ensure_publisher(self, room_id):
         if room_id in self._wired_rooms:
             return
-        session = self.game_manager.join_session(room_id)
+        session = self.game_manager.get_session(room_id)
         if session is None:
             return
         self._wired_rooms.add(room_id)
-        NetworkPublisher(session.events, sink=lambda response: self._broadcast(room_id, response))
+        NetworkPublisher(
+            session,
+            broadcast=lambda response: self._broadcast(room_id, response),
+            unicast=self._send_to_username,
+        )
+
+    def _send_to_username(self, username, response):
+        websocket = self._connections_by_username.get(username)
+        if websocket is None:
+            return
+        asyncio.create_task(self._safe_send(websocket, serialize(response)))
 
     def _broadcast(self, room_id, response):
+        if room_id in self._rooms_broadcast_this_tick:
+            return
+
+        self._rooms_broadcast_this_tick.add(room_id)
         message = serialize(response)
         for websocket in list(self._connections_by_room.get(room_id, ())):
             asyncio.create_task(self._safe_send(websocket, message))
@@ -180,7 +199,7 @@ class WebSocketServer:
         if seat is None:
             return
         room_id, username = seat
-        session = self.game_manager.join_session(room_id)
+        session = self.game_manager.get_session(room_id)
         if session is None or session.controller.game_engine.arbiter.game_over:
             return
         session.mark_disconnected(username)
@@ -188,8 +207,10 @@ class WebSocketServer:
 
     async def _forfeit_after_grace_period(self, room_id, username):
         await asyncio.sleep(self.disconnect_grace_seconds)
-        session = self.game_manager.join_session(room_id)
+        session = self.game_manager.get_session(room_id)
         if session is None or not session.is_reconnectable(username):
             return  # reconnected in time, or the game already ended
+        # forfeit_by_disconnect() publishes GAME_ENDED, which NetworkPublisher
+        # (already wired for this room since it was created/joined earlier)
+        # turns into the broadcast itself - no need to build one here too.
         session.forfeit_by_disconnect(username)
-        self._broadcast(room_id, GameStateUpdated(room_id, session.controller.get_state()))

@@ -41,17 +41,17 @@ class TestCreateSession(unittest.TestCase):
         self.assertEqual(manager._session_factory.__name__, "GameSession")
 
 
-class TestJoinSession(unittest.TestCase):
+class TestGetSession(unittest.TestCase):
 
     def test_returns_the_session_registered_under_that_room_id(self):
         manager = GameManager(session_factory=lambda room_id: Mock(room_id=room_id))
         created = manager.create_session()
 
-        self.assertIs(manager.join_session(created.room_id), created)
+        self.assertIs(manager.get_session(created.room_id), created)
 
     def test_returns_none_for_an_unknown_room_id(self):
         manager = GameManager()
-        self.assertIsNone(manager.join_session("no-such-room"))
+        self.assertIsNone(manager.get_session("no-such-room"))
 
 
 class TestFindReconnectableSession(unittest.TestCase):

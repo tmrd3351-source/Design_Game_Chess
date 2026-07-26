@@ -8,6 +8,7 @@ from SERVER.events.event_types import (
     PLAYER_DISCONNECTED, PLAYER_RECONNECTED,
 )
 from SERVER.model.position import Position
+from SERVER.model.move_result import MoveResult
 
 
 def make_session(room_id="abc123"):
@@ -345,6 +346,158 @@ class TestForfeitByDisconnect(unittest.TestCase):
 
         # Untouched - not overwritten with a forfeit result.
         self.assertEqual(controller.game_engine.arbiter.winner, "w")
+
+
+class TestGetState(unittest.TestCase):
+
+    def test_delegates_to_controller_get_state(self):
+        session, controller = make_session()
+        controller.get_state.return_value = "the_state"
+
+        self.assertEqual(session.get_state(), "the_state")
+
+
+class TestRequestMove(unittest.TestCase):
+    """GameSession's own job here is room/identity permission only (seated?
+    right color?) - never re-deciding chess legality, which is entirely
+    Controller/GameEngine's call and passed through untouched."""
+
+    def test_owner_moving_their_own_piece_reaches_the_controller(self):
+        session, controller = make_session()
+        session.join("alice")
+        session.join("bob")
+        controller.can_control_piece.return_value = True
+        controller.inside_board.return_value = True
+        controller.handle_move.return_value = "the_result"
+        source, destination = Position(6, 0), Position(5, 0)
+
+        result = session.request_move("alice", source, destination)
+
+        controller.can_control_piece.assert_called_once_with("w", source)
+        controller.handle_move.assert_called_once_with(source, destination)
+        self.assertEqual(result, "the_result")
+
+    def test_moving_the_opponents_piece_never_reaches_the_controller(self):
+        session, controller = make_session()
+        session.join("alice")
+        session.join("bob")
+        controller.can_control_piece.return_value = False
+
+        session.request_move("bob", Position(6, 0), Position(5, 0))
+
+        controller.handle_move.assert_not_called()
+
+    def test_moving_the_opponents_piece_returns_an_illegal_result(self):
+        session, controller = make_session()
+        session.join("alice")
+        session.join("bob")
+        controller.can_control_piece.return_value = False
+
+        result = session.request_move("bob", Position(6, 0), Position(5, 0))
+
+        self.assertFalse(result.is_valid)
+        self.assertEqual(result.reason, "not_your_piece")
+
+    def test_a_spectator_can_never_move_anything(self):
+        session, controller = make_session()
+        session.join("alice")
+        session.join("bob")
+        session.join("carol")  # spectator
+        controller.can_control_piece.return_value = True  # would pass if ever reached
+
+        session.request_move("carol", Position(6, 0), Position(5, 0))
+
+        controller.can_control_piece.assert_not_called()
+        controller.handle_move.assert_not_called()
+
+    def test_an_unknown_username_can_never_move_anything(self):
+        session, controller = make_session()
+        session.join("alice")
+
+        session.request_move("nobody", Position(6, 0), Position(5, 0))
+
+        controller.handle_move.assert_not_called()
+
+    def test_an_out_of_bounds_destination_never_reaches_the_controller(self):
+        session, controller = make_session()
+        session.join("alice")
+        controller.can_control_piece.return_value = True
+        controller.inside_board.return_value = False
+
+        session.request_move("alice", Position(0, 0), Position(99, 99))
+
+        controller.handle_move.assert_not_called()
+
+    def test_out_of_bounds_destination_returns_an_illegal_result(self):
+        session, controller = make_session()
+        session.join("alice")
+        controller.can_control_piece.return_value = True
+        controller.inside_board.return_value = False
+
+        result = session.request_move("alice", Position(0, 0), Position(99, 99))
+
+        self.assertFalse(result.is_valid)
+        self.assertEqual(result.reason, "out_of_bounds")
+
+    def test_does_not_re_validate_move_legality_itself(self):
+        # Whatever Controller.handle_move (really GameEngine.request_move)
+        # decides about actual chess legality passes straight through -
+        # GameSession only gates on ownership/bounds, never re-checks this.
+        session, controller = make_session()
+        session.join("alice")
+        controller.can_control_piece.return_value = True
+        controller.inside_board.return_value = True
+        controller.handle_move.return_value = MoveResult.illegal("illegal_move")
+
+        result = session.request_move("alice", Position(6, 0), Position(5, 0))
+
+        self.assertEqual(result.reason, "illegal_move")
+
+
+class TestRequestJump(unittest.TestCase):
+
+    def test_owner_jumping_their_own_piece_reaches_the_controller(self):
+        session, controller = make_session()
+        session.join("alice")
+        controller.can_control_piece.return_value = True
+        controller.handle_jump.return_value = "the_result"
+        position = Position(6, 1)
+
+        result = session.request_jump("alice", position)
+
+        controller.can_control_piece.assert_called_once_with("w", position)
+        controller.handle_jump.assert_called_once_with(position)
+        self.assertEqual(result, "the_result")
+
+    def test_jumping_the_opponents_piece_never_reaches_the_controller(self):
+        session, controller = make_session()
+        session.join("alice")
+        session.join("bob")
+        controller.can_control_piece.return_value = False
+
+        session.request_jump("bob", Position(6, 1))
+
+        controller.handle_jump.assert_not_called()
+
+    def test_a_spectator_can_never_jump_anything(self):
+        session, controller = make_session()
+        session.join("alice")
+        session.join("bob")
+        session.join("carol")
+        controller.can_control_piece.return_value = True
+
+        session.request_jump("carol", Position(6, 1))
+
+        controller.can_control_piece.assert_not_called()
+        controller.handle_jump.assert_not_called()
+
+    def test_an_unknown_username_can_never_jump_anything(self):
+        session, controller = make_session()
+        session.join("alice")
+
+        session.request_jump("nobody", Position(6, 1))
+
+        controller.handle_jump.assert_not_called()
 
 
 class TestAdvance(unittest.TestCase):

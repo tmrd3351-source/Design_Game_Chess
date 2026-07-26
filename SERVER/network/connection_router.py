@@ -63,65 +63,42 @@ class ConnectionRouter:
         return RoomCreated(session.room_id, session.color_of(command.username))
 
     def _handle_join_room(self, command):
-        session = self.game_manager.join_session(command.room_id)
+        session = self.game_manager.get_session(command.room_id)
         if session is None:
             return RoomJoinFailed("room_not_found")
         session.join(command.username)
-        return RoomJoined(session.room_id, session.color_of(command.username), session.controller.get_state())
+        return RoomJoined(session.room_id, session.color_of(command.username), session.get_state())
 
     def _handle_move(self, command):
-        session = self.game_manager.join_session(command.room_id)
+        session = self.game_manager.get_session(command.room_id)
         if session is None:
             return None
+
         source = Position(*command.source)
         destination = Position(*command.destination)
-        if self._is_legal_attempt(session, command.username, source, destination):
-            session.controller.handle_move(source, destination)
+
         # Just schedules the move - it may still be mid-flight. MOVE_COMPLETED
         # and GAME_ENDED are only published once time actually advances far
         # enough for it to land, via GameSession.advance() (SessionTicker).
-        return GameStateUpdated(session.room_id, session.controller.get_state())
+        session.request_move(command.username, source, destination)
+
+        return GameStateUpdated(session.room_id, session.get_state())
 
     def _handle_jump(self, command):
-        session = self.game_manager.join_session(command.room_id)
+        session = self.game_manager.get_session(command.room_id)
         if session is None:
             return None
+
         position = Position(*command.position)
-        if self._is_legal_jump_attempt(session, command.username, position):
-            session.controller.handle_jump(position)
-        return GameStateUpdated(session.room_id, session.controller.get_state())
+        session.request_jump(command.username, position)
 
-    def _is_legal_jump_attempt(self, session, username, position):
-        board = session.controller.game_engine.board
-        if not board.inside_bounds(position):
-            return False
-        return self._owns_piece_at(session, username, position)
-
-    def _is_legal_attempt(self, session, username, source, destination):
-        # Never trust a MoveCommand's coordinates - an out-of-bounds source
-        # or destination would otherwise reach Board.get_piece() and crash
-        # the connection with an IndexError, since board access assumes
-        # valid coordinates rather than checking them itself.
-        board = session.controller.game_engine.board
-        if not (board.inside_bounds(source) and board.inside_bounds(destination)):
-            return False
-        return self._owns_piece_at(session, username, source)
-
-    def _owns_piece_at(self, session, username, position):
-        """A move is only honored if the piece at `source` belongs to the
-        color `username` was seated as - otherwise either player could move
-        either side's pieces. Spectators (and empty squares) never own
-        anything."""
-        piece = session.controller.game_engine.board.get_piece(position)
-        if piece is None:
-            return False
-        return session.color_of(username) == piece.get_color()
+        return GameStateUpdated(session.room_id, session.get_state())
 
     def _handle_get_state(self, command):
-        session = self.game_manager.join_session(command.room_id)
+        session = self.game_manager.get_session(command.room_id)
         if session is None:
             return None
-        return GameStateUpdated(session.room_id, session.controller.get_state())
+        return GameStateUpdated(session.room_id, session.get_state())
 
     def _handle_check_reconnect(self, command):
         session = self.game_manager.find_reconnectable_session(command.username)

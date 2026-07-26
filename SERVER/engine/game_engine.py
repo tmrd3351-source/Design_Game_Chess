@@ -16,6 +16,10 @@ class GameEngine:
     def inside_board(self, position):
         return self.board.inside_bounds(position)
 
+    def get_piece_color(self, position):
+        piece = self.board.get_piece(position)
+        return piece.get_color() if piece is not None else None
+
     def _next_sequence(self):
         self._sequence_counter += 1
         return self._sequence_counter
