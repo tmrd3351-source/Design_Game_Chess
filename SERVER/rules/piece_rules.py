@@ -1,4 +1,4 @@
-from SERVER.model.position import Position
+from SERVER.engine.model.position import Position
 
 
 def _path_is_clear(board, source, destination):

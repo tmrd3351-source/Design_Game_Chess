@@ -37,8 +37,10 @@ class TestCommands(unittest.TestCase):
         self.assertEqual(command.username, "alice")
         self.assertEqual(command.password, "hunter2")
 
-    def test_get_state_command_stores_room_id(self):
-        self.assertEqual(GetStateCommand("room-1").room_id, "room-1")
+    def test_get_state_command_stores_username_and_room_id(self):
+        command = GetStateCommand("alice", "room-1")
+        self.assertEqual(command.username, "alice")
+        self.assertEqual(command.room_id, "room-1")
 
     def test_check_reconnect_command_stores_username(self):
         self.assertEqual(CheckReconnectCommand("alice").username, "alice")

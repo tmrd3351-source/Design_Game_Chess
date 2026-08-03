@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import Mock
 
 from SERVER.controller.controller import Controller
-from SERVER.model.game_state import GameState
+from SERVER.engine.model.game_state import GameState
 
 
 class TestControllerConstruction(unittest.TestCase):

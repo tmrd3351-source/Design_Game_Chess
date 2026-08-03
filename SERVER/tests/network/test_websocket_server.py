@@ -69,6 +69,23 @@ class TestWebSocketServer(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsInstance(response, LoginFailed)
 
+    async def _receive_of_type(self, client, expected_type, max_messages=5):
+        # The joiner who fills a room's second seat gets two independent
+        # pushes for that one JoinRoomCommand: their own direct RoomJoined
+        # reply, and a GameStarted from NetworkPublisher's GAME_STARTED
+        # subscription (which notifies every seated player, themselves
+        # included, the same way it does for the matchmaking case) - both
+        # go out via unicast()/asyncio.create_task, so which one actually
+        # reaches the socket first is a scheduling detail, not a guarantee.
+        # HomeScreen treats the two identically anyway (room_id/color only),
+        # so tests drain for whichever type they care about instead of
+        # assuming a fixed arrival order.
+        for _ in range(max_messages):
+            message = await asyncio.wait_for(client.receive(), timeout=5)
+            if isinstance(message, expected_type):
+                return message
+        self.fail(f"no {expected_type.__name__} received within {max_messages} messages")
+
     async def test_create_and_join_room_over_two_real_connections(self):
         alice = await self.make_client()
         bob = await self.make_client()
@@ -79,9 +96,8 @@ class TestWebSocketServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(created.color, "w")
 
         await bob.send_command(JoinRoomCommand("bob", created.room_id))
-        joined = await bob.receive()
+        joined = await self._receive_of_type(bob, RoomJoined)
 
-        self.assertIsInstance(joined, RoomJoined)
         self.assertEqual(joined.room_id, created.room_id)
         self.assertEqual(joined.color, "b")
         self.assertEqual(joined.state["board"]["rows"], 8)
@@ -101,8 +117,8 @@ class TestWebSocketServer(unittest.IsolatedAsyncioTestCase):
         created = await alice.receive()
 
         await bob.send_command(JoinRoomCommand("bob", created.room_id))
-        bob_reply = await bob.receive()
-        self.assertIsInstance(bob_reply, RoomJoined)
+        bob_reply = await self._receive_of_type(bob, RoomJoined)
+        self.assertEqual(bob_reply.room_id, created.room_id)
 
         alice_push = await asyncio.wait_for(alice.receive(), timeout=5)
         self.assertIsInstance(alice_push, GameStarted)
@@ -322,13 +338,27 @@ class TestReconnectAfterDisconnect(unittest.IsolatedAsyncioTestCase):
         self.clients.append(client)
         return client
 
+    async def _receive_of_type(self, client, expected_type, max_messages=5):
+        # Bob's JoinRoomCommand fills the second seat, so it triggers two
+        # independent pushes to him: his own direct RoomJoined reply, and a
+        # GameStarted from NetworkPublisher's GAME_STARTED subscription
+        # (which notifies every seated player, himself included). Both go
+        # out via unicast()/asyncio.create_task, so arrival order between
+        # them isn't guaranteed - drain until the one this test actually
+        # needs shows up, same as TestWebSocketServer._receive_of_type.
+        for _ in range(max_messages):
+            message = await asyncio.wait_for(client.receive(), timeout=5)
+            if isinstance(message, expected_type):
+                return message
+        self.fail(f"no {expected_type.__name__} received within {max_messages} messages")
+
     async def start_a_game(self):
         alice = await self.make_client()
         bob = await self.make_client()
         await alice.send_command(CreateRoomCommand("alice"))
         created = await alice.receive()
         await bob.send_command(JoinRoomCommand("bob", created.room_id))
-        await bob.receive()
+        await self._receive_of_type(bob, RoomJoined)
         await alice.receive()  # alice's own "game started" push
         return alice, bob, created.room_id
 
@@ -384,113 +414,125 @@ class TestReconnectAfterDisconnect(unittest.IsolatedAsyncioTestCase):
 
 class TestBroadcastActiveRooms(unittest.TestCase):
     """_broadcast_active_rooms is plain synchronous logic - it decides which
-    rooms need a push, then hands off to _broadcast (mocked out here) to
+    sessions need a push, then hands off to broadcast (mocked out here) to
     actually send anything, so these don't need a real socket/event loop."""
 
     def make_server(self):
         game_manager = Mock()
+        game_manager.sessions = {}
         server = WebSocketServer(Mock(), game_manager, Mock(), port=0)
-        server._broadcast = Mock()
+        server.broadcast = Mock()
         return server, game_manager
 
-    def test_skips_rooms_with_no_tracked_connections(self):
+    def test_skips_when_there_are_no_sessions(self):
         server, game_manager = self.make_server()
 
         server._broadcast_active_rooms()
 
-        game_manager.get_session.assert_not_called()
-        server._broadcast.assert_not_called()
+        server.broadcast.assert_not_called()
 
-    def test_skips_a_room_whose_session_no_longer_exists(self):
+    def test_skips_a_session_with_no_active_motions_or_cooldowns(self):
         server, game_manager = self.make_server()
-        server._connections_by_room["room-1"] = {Mock()}
-        game_manager.get_session.return_value = None
-
-        server._broadcast_active_rooms()
-
-        server._broadcast.assert_not_called()
-
-    def test_skips_a_room_with_no_active_motions_or_cooldowns(self):
-        server, game_manager = self.make_server()
-        server._connections_by_room["room-1"] = {Mock()}
         session = Mock()
         session.controller.game_engine.arbiter.motions = []
         session.controller.game_engine.arbiter.cooldowns = []
-        game_manager.get_session.return_value = session
+        game_manager.sessions = {"room-1": session}
 
         server._broadcast_active_rooms()
 
-        server._broadcast.assert_not_called()
+        server.broadcast.assert_not_called()
 
-    def test_broadcasts_a_room_with_an_active_motion(self):
+    def test_broadcasts_a_session_with_an_active_motion(self):
         server, game_manager = self.make_server()
-        server._connections_by_room["room-1"] = {Mock()}
         session = Mock()
         session.controller.game_engine.arbiter.motions = [Mock()]
         session.controller.game_engine.arbiter.cooldowns = []
         session.controller.get_state.return_value = "the_state"
-        game_manager.get_session.return_value = session
+        game_manager.sessions = {"room-1": session}
 
         server._broadcast_active_rooms()
 
-        server._broadcast.assert_called_once()
-        room_id, response = server._broadcast.call_args.args
+        server.broadcast.assert_called_once()
+        room_id, response = server.broadcast.call_args.args
         self.assertEqual(room_id, "room-1")
         self.assertIsInstance(response, GameStateUpdated)
         self.assertEqual(response.state, "the_state")
 
-    def test_broadcasts_a_room_with_an_active_cooldown_even_with_no_motions(self):
+    def test_broadcasts_a_session_with_an_active_cooldown_even_with_no_motions(self):
         server, game_manager = self.make_server()
-        server._connections_by_room["room-1"] = {Mock()}
         session = Mock()
         session.controller.game_engine.arbiter.motions = []
         session.controller.game_engine.arbiter.cooldowns = [Mock()]
-        game_manager.get_session.return_value = session
+        game_manager.sessions = {"room-1": session}
 
         server._broadcast_active_rooms()
 
-        server._broadcast.assert_called_once()
+        server.broadcast.assert_called_once()
 
 
 class TestBroadcast(unittest.IsolatedAsyncioTestCase):
-    """_broadcast dedupes by actual serialized content, not "already
+    """broadcast() dedupes by actual serialized content, not "already
     broadcast this room this tick" - a disconnect-forfeit's GAME_ENDED fires
     from its own independent asyncio timer (not the tick loop), so it can
     land in the same ~100ms window as an unrelated broadcast for the same
     room. Content comparison guarantees a message carrying genuinely new
     information is never the one silently dropped - only a byte-identical
-    repeat ever is. (_broadcast fires sends via asyncio.create_task, so
-    these need a running loop and a moment for those tasks to complete.)"""
+    repeat ever is. (broadcast fires sends via asyncio.create_task, so
+    these need a running loop and a moment for those tasks to complete.)
+
+    Recipients are resolved dynamically each call from the session's own
+    roster (session.players/session.spectators) matched against tracked
+    connections - there's no separate "connections in this room" bookkeeping
+    to seed."""
 
     def make_server(self):
         return WebSocketServer(Mock(), Mock(), Mock(), port=0)
 
-    async def test_sends_to_every_connection_tracked_under_the_room(self):
+    async def test_sends_to_every_seated_player_and_spectator_with_a_tracked_connection(self):
         server = self.make_server()
         ws_a, ws_b = Mock(), Mock()
-        server._connections_by_room["room-1"] = {ws_a, ws_b}
+        server._connections_by_username = {"alice": ws_a, "bob": ws_b}
+        server.game_manager.get_session.return_value = Mock(players={"w": "alice", "b": "bob"}, spectators=[])
         sent = []
 
         async def fake_safe_send(websocket, message):
             sent.append(websocket)
         server._safe_send = fake_safe_send
 
-        server._broadcast("room-1", GameStateUpdated("room-1", "state_a"))
+        server.broadcast("room-1", GameStateUpdated("room-1", "state_a"))
         await asyncio.sleep(0)
 
         self.assertEqual(set(sent), {ws_a, ws_b})
 
+    async def test_skips_a_seated_player_with_no_tracked_connection(self):
+        server = self.make_server()
+        ws_a = Mock()
+        server._connections_by_username = {"alice": ws_a}
+        server.game_manager.get_session.return_value = Mock(players={"w": "alice", "b": "bob"}, spectators=[])
+        sent = []
+
+        async def fake_safe_send(websocket, message):
+            sent.append(websocket)
+        server._safe_send = fake_safe_send
+
+        server.broadcast("room-1", GameStateUpdated("room-1", "state_a"))
+        await asyncio.sleep(0)
+
+        self.assertEqual(sent, [ws_a])
+
     async def test_an_identical_second_broadcast_to_the_same_room_is_dropped(self):
         server = self.make_server()
-        server._connections_by_room["room-1"] = {Mock()}
+        ws = Mock()
+        server._connections_by_username = {"alice": ws}
+        server.game_manager.get_session.return_value = Mock(players={"w": "alice"}, spectators=[])
         sent = []
 
         async def fake_safe_send(websocket, message):
             sent.append(message)
         server._safe_send = fake_safe_send
 
-        server._broadcast("room-1", GameStateUpdated("room-1", {"motions": [], "game_over": True, "winner": "w"}))
-        server._broadcast("room-1", GameStateUpdated("room-1", {"motions": [], "game_over": True, "winner": "w"}))
+        server.broadcast("room-1", GameStateUpdated("room-1", {"motions": [], "game_over": True, "winner": "w"}))
+        server.broadcast("room-1", GameStateUpdated("room-1", {"motions": [], "game_over": True, "winner": "w"}))
         await asyncio.sleep(0)
 
         self.assertEqual(len(sent), 1)
@@ -501,23 +543,30 @@ class TestBroadcast(unittest.IsolatedAsyncioTestCase):
         # forfeit's GAME_ENDED landing moments apart) where the second one
         # carries genuinely new information - it must always go out.
         server = self.make_server()
-        server._connections_by_room["room-1"] = {Mock()}
+        ws = Mock()
+        server._connections_by_username = {"alice": ws}
+        server.game_manager.get_session.return_value = Mock(players={"w": "alice"}, spectators=[])
         sent = []
 
         async def fake_safe_send(websocket, message):
             sent.append(message)
         server._safe_send = fake_safe_send
 
-        server._broadcast("room-1", GameStateUpdated("room-1", {"motions": [], "game_over": False, "winner": None}))
-        server._broadcast("room-1", GameStateUpdated("room-1", {"motions": [], "game_over": True, "winner": "w"}))
+        server.broadcast("room-1", GameStateUpdated("room-1", {"motions": [], "game_over": False, "winner": None}))
+        server.broadcast("room-1", GameStateUpdated("room-1", {"motions": [], "game_over": True, "winner": "w"}))
         await asyncio.sleep(0)
 
         self.assertEqual(len(sent), 2)
 
     async def test_different_rooms_are_never_deduped_against_each_other(self):
         server = self.make_server()
-        server._connections_by_room["room-1"] = {Mock()}
-        server._connections_by_room["room-2"] = {Mock()}
+        ws1, ws2 = Mock(), Mock()
+        server._connections_by_username = {"alice": ws1, "bob": ws2}
+        sessions = {
+            "room-1": Mock(players={"w": "alice"}, spectators=[]),
+            "room-2": Mock(players={"w": "bob"}, spectators=[]),
+        }
+        server.game_manager.get_session.side_effect = lambda room_id: sessions[room_id]
         sent = []
 
         async def fake_safe_send(websocket, message):
@@ -525,8 +574,8 @@ class TestBroadcast(unittest.IsolatedAsyncioTestCase):
         server._safe_send = fake_safe_send
 
         identical_state = {"motions": [], "game_over": False, "winner": None}
-        server._broadcast("room-1", GameStateUpdated("room-1", identical_state))
-        server._broadcast("room-2", GameStateUpdated("room-2", identical_state))
+        server.broadcast("room-1", GameStateUpdated("room-1", identical_state))
+        server.broadcast("room-2", GameStateUpdated("room-2", identical_state))
         await asyncio.sleep(0)
 
         self.assertEqual(len(sent), 2)

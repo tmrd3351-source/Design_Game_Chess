@@ -2,8 +2,8 @@ import unittest
 from unittest.mock import Mock
 
 from SERVER.config.constants import MOVE_TIME, MOTION_TRANSLATE, MOTION_JUMP
-from SERVER.model.position import Position
-from SERVER.model.move_result import MoveResult
+from SERVER.engine.model.position import Position
+from SERVER.engine.model.move_result import MoveResult
 from SERVER.engine.game_engine import GameEngine
 
 

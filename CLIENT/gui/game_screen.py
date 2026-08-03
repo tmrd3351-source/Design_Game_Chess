@@ -40,7 +40,7 @@ class GameScreen:
         self.selected = None
 
     def run(self):
-        self.network.send(GetStateCommand(self.room_id))
+        self.network.send(GetStateCommand(self.username, self.room_id))
 
         cv2.namedWindow(WINDOW_NAME)
         cv2.setMouseCallback(WINDOW_NAME, self.on_mouse)

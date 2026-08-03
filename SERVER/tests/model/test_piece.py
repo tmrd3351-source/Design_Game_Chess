@@ -2,8 +2,8 @@ import unittest
 from unittest.mock import Mock
 
 from SERVER.config.constants import REST_NONE, REST_SHORT, STATE_IDLE, STATE_MOVING
-from SERVER.model.piece import Piece
-from SERVER.model.position import Position
+from SERVER.engine.model.piece import Piece
+from SERVER.engine.model.position import Position
 
 
 class TestPiece(unittest.TestCase):

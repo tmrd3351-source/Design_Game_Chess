@@ -3,31 +3,23 @@ import asyncio
 import websockets
 
 from SHARED.network.serialization import serialize, deserialize
-from SERVER.network.network_publisher import NetworkPublisher
-from SHARED.network.protocol import (
-    PlayCommand, CreateRoomCommand, JoinRoomCommand, GameStarted, GameStateUpdated,
-)
+from SHARED.network.protocol import GameStateUpdated
 
 TICK_INTERVAL_SECONDS = 0.1
 DISCONNECT_GRACE_SECONDS = 20
 
 
 class WebSocketServer:
-    """Real transport for ConnectionRouter. For each connection: deserialize
-    an incoming message into a Command, route it through
-    connection_router.handle(), serialize the Response straight back to that
-    same connection. Also tracks which connections belong to which room, so
-    a NetworkPublisher (one per session, wired the first time a connection
-    is seen joining that room) can broadcast MOVE_COMPLETED/GAME_ENDED
-    updates to every connection in the room - not just whoever moved.
+    """Real transport for ConnectionRouter, and nothing more: for each
+    connection, deserialize an incoming message into a Command and hand it
+    straight to connection_router.handle() - no Response is ever built or
+    sent from here. `handle()` itself produces no return value; instead
+    ConnectionRouter (and, via it, NetworkPublisher) calls back into this
+    class's own unicast()/broadcast() to actually deliver replies, which is
+    why `router.publisher = self` is wired below.
 
     Also drives SessionTicker.tick() on a fixed interval, since motions only
     resolve once real time elapses, independent of any incoming message.
-
-    A PlayCommand that finds no match yet only gets Waiting() as its direct
-    reply - the caller who was already queued has no room to be tracked
-    under, so when a *later* PlayCommand matches them, this also pushes
-    that same GameStarted to the earlier caller's own connection.
 
     Also handles disconnects: whenever a seated player's connection drops,
     their session gets a `disconnect_grace_seconds` window to reconnect
@@ -38,16 +30,15 @@ class WebSocketServer:
     def __init__(self, connection_router, game_manager, session_ticker, host="localhost", port=8765,
                  disconnect_grace_seconds=DISCONNECT_GRACE_SECONDS):
         self.connection_router = connection_router
+        self.connection_router.publisher = self
         self.game_manager = game_manager
         self.session_ticker = session_ticker
         self.host = host
         self.port = port
         self.disconnect_grace_seconds = disconnect_grace_seconds
         self.ready = asyncio.Event()
-        self._connections_by_room = {}
         self._connections_by_username = {}
-        self._seat_by_connection = {}  # websocket -> (room_id, username)
-        self._wired_rooms = set()
+        self._username_by_connection = {}  # websocket -> username, for disconnect lookup
         self._last_broadcast_message = {}  # room_id -> last serialized message sent
 
     async def start(self):
@@ -70,22 +61,19 @@ class WebSocketServer:
         # (the sliding piece, the cooldown bar draining) would sit frozen.
         # Broadcasting every tick while a room has something actually in
         # flight keeps clients updated at the same ~100ms granularity the
-        # arbiter itself ticks at. _broadcast() itself dedupes against
+        # arbiter itself ticks at. broadcast() itself dedupes against
         # whatever NetworkPublisher may have just sent this same tick, so
         # nothing here needs to track "did we already touch this room".
-        for room_id in list(self._connections_by_room.keys()):
-            session = self.game_manager.get_session(room_id)
-            if session is None:
-                continue
+        for room_id, session in list(self.game_manager.sessions.items()):
             arbiter = session.controller.game_engine.arbiter
             if not arbiter.motions and not arbiter.cooldowns:
                 continue
-            self._broadcast(room_id, GameStateUpdated(room_id, session.controller.get_state()))
+            self.broadcast(room_id, GameStateUpdated(room_id, session.controller.get_state()))
 
     async def _handle_connection(self, websocket):
         try:
             async for message in websocket:
-                await self._handle_message(websocket, message)
+                self._handle_message(websocket, message)
         except websockets.ConnectionClosed:
             # The peer disappeared without a clean close (window closed,
             # process killed, network drop) - expected and already handled
@@ -94,82 +82,23 @@ class WebSocketServer:
         finally:
             self._forget_connection(websocket)
 
-    async def _handle_message(self, websocket, message):
+    def _handle_message(self, websocket, message):
         command = deserialize(message)
 
-        if isinstance(command, JoinRoomCommand):
-            # GAME_STARTED can fire from inside session.join() during
-            # handle() below, the moment this join fills the second seat -
-            # unlike a PlayCommand match (whose room doesn't exist until
-            # Matchmaker.find_match() creates it), this room_id is already
-            # known, so the publisher must be wired before that happens,
-            # not after.
-            self._ensure_publisher(command.room_id)
+        username = getattr(command, "username", None)
+        if username is not None:
+            self._connections_by_username[username] = websocket
+            self._username_by_connection[websocket] = username
 
-        response = self.connection_router.handle(command)
-        if isinstance(command, (PlayCommand, CreateRoomCommand, JoinRoomCommand)):
-            self._connections_by_username[command.username] = websocket
+        self.connection_router.handle(command)
 
-        if response is None:
-            return
-
-        room_id = getattr(response, "room_id", None)
-        if room_id is not None:
-            self._track_connection(websocket, room_id)
-            self._ensure_publisher(room_id)
-
-        color = getattr(response, "color", None)
-        if color is not None and room_id is not None:
-            self._seat_by_connection[websocket] = (room_id, command.username)
-
-        if isinstance(response, GameStarted):
-            # A PlayCommand match: the room (and its publisher) didn't exist
-            # before this call, so GAME_STARTED's own unicast never reached
-            # the already-waiting opponent - push it to them directly instead.
-            await self._notify_matched_opponent(command.username, response)
-
-        await websocket.send(serialize(response))
-
-    async def _notify_matched_opponent(self, matched_username, response):
-        session = self.game_manager.get_session(response.room_id)
-        if session is None:
-            return
-        for username in session.players.values():
-            if username == matched_username:
-                continue
-            opponent_ws = self._connections_by_username.get(username)
-            if opponent_ws is None:
-                continue
-            self._track_connection(opponent_ws, response.room_id)
-            self._seat_by_connection[opponent_ws] = (response.room_id, username)
-            # Not a resend of `response` - that one was built with the
-            # matched caller's own color, which would be wrong here.
-            opponent_response = GameStarted(response.room_id, session.color_of(username))
-            await self._safe_send(opponent_ws, serialize(opponent_response))
-
-    def _track_connection(self, websocket, room_id):
-        self._connections_by_room.setdefault(room_id, set()).add(websocket)
-
-    def _ensure_publisher(self, room_id):
-        if room_id in self._wired_rooms:
-            return
-        session = self.game_manager.get_session(room_id)
-        if session is None:
-            return
-        self._wired_rooms.add(room_id)
-        NetworkPublisher(
-            session,
-            broadcast=lambda response: self._broadcast(room_id, response),
-            unicast=self._send_to_username,
-        )
-
-    def _send_to_username(self, username, response):
+    def unicast(self, username, response):
         websocket = self._connections_by_username.get(username)
         if websocket is None:
             return
         asyncio.create_task(self._safe_send(websocket, serialize(response)))
 
-    def _broadcast(self, room_id, response):
+    def broadcast(self, room_id, response):
         # Dedup by actual content, not "already broadcast this tick" - a
         # disconnect-forfeit's GAME_ENDED fires from its own independent
         # asyncio timer, not the tick loop, so it can land in the same
@@ -180,9 +109,15 @@ class WebSocketServer:
         message = serialize(response)
         if self._last_broadcast_message.get(room_id) == message:
             return
-
         self._last_broadcast_message[room_id] = message
-        for websocket in list(self._connections_by_room.get(room_id, ())):
+
+        session = self.game_manager.get_session(room_id)
+        if session is None:
+            return
+        for username in list(session.players.values()) + list(session.spectators):
+            websocket = self._connections_by_username.get(username)
+            if websocket is None:
+                continue
             asyncio.create_task(self._safe_send(websocket, message))
 
     async def _safe_send(self, websocket, message):
@@ -192,18 +127,21 @@ class WebSocketServer:
             pass
 
     def _forget_connection(self, websocket):
-        for connections in self._connections_by_room.values():
-            connections.discard(websocket)
-
-        seat = self._seat_by_connection.pop(websocket, None)
-        if seat is None:
+        username = self._username_by_connection.pop(websocket, None)
+        if username is None:
             return
-        room_id, username = seat
-        session = self.game_manager.get_session(room_id)
+
+        session = self._find_seated_session(username)
         if session is None or session.controller.game_engine.arbiter.game_over:
             return
         session.mark_disconnected(username)
-        asyncio.create_task(self._forfeit_after_grace_period(room_id, username))
+        asyncio.create_task(self._forfeit_after_grace_period(session.room_id, username))
+
+    def _find_seated_session(self, username):
+        for session in self.game_manager.sessions.values():
+            if session.color_of(username) is not None:
+                return session
+        return None
 
     async def _forfeit_after_grace_period(self, room_id, username):
         await asyncio.sleep(self.disconnect_grace_seconds)

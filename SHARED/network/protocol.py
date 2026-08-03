@@ -55,7 +55,8 @@ class GetStateCommand:
     for a spectator who was never seated, JoinRoomCommand would add them as
     one instead of just reading the board."""
 
-    def __init__(self, room_id):
+    def __init__(self, username, room_id):
+        self.username = username
         self.room_id = room_id
 
 

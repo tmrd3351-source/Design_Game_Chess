@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import Mock
 
-from SERVER.model.board import Board
-from SERVER.model.position import Position
-from SERVER.model.piece import Piece
+from SERVER.engine.model.board import Board
+from SERVER.engine.model.position import Position
+from SERVER.engine.model.piece import Piece
 
 
 def make_piece(position):

@@ -148,7 +148,7 @@ class GuiRenderer:
 
 if __name__ == "__main__":
     from SERVER.setup.board_setup import GuiBoardSetup
-    from SERVER.model.game_state import GameState
+    from SERVER.engine.model.game_state import GameState
 
     board = GuiBoardSetup().load()
     if board is not None:

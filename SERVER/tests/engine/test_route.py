@@ -1,6 +1,6 @@
 import unittest
 
-from SERVER.model.position import Position
+from SERVER.engine.model.position import Position
 from SERVER.engine.route import compute_route
 
 

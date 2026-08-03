@@ -6,10 +6,10 @@ from SERVER.config.constants import (
     MOVE_COOLDOWN_TIME, JUMP_COOLDOWN_TIME, REST_NONE, REST_SHORT, REST_LONG,
     STATE_IDLE, STATE_MOVING, STATE_JUMPING, MOTION_TRANSLATE, MOTION_JUMP,
 )
-from SERVER.model.board import Board
-from SERVER.model.piece import Piece
-from SERVER.model.position import Position
-from SERVER.model.motion import Motion
+from SERVER.engine.model.board import Board
+from SERVER.engine.model.piece import Piece
+from SERVER.engine.model.position import Position
+from SERVER.engine.model.motion import Motion
 from SERVER.engine.real_time_arbiter import RealTimeArbiter
 
 

@@ -8,49 +8,64 @@ from SHARED.network.protocol import (
     GameStarted, Waiting, PlayFailed, RoomCreated, RoomJoined, RoomJoinFailed, GameStateUpdated,
     ReconnectAvailable, NoReconnectAvailable,
 )
-from SERVER.model.position import Position
-from SERVER.model.move_result import MoveResult
+from SERVER.engine.model.position import Position
+from SERVER.engine.model.move_result import MoveResult
 
 
 def make_router():
     game_manager = Mock()
     auth_service = Mock()
     matchmaker = Mock()
-    return ConnectionRouter(game_manager, auth_service, matchmaker), game_manager, auth_service, matchmaker
+    publisher = Mock()
+    return ConnectionRouter(game_manager, auth_service, matchmaker, publisher), game_manager, auth_service, matchmaker, publisher
 
 
 class TestHandleUnknownCommand(unittest.TestCase):
 
-    def test_returns_none_for_a_command_with_no_registered_handler(self):
-        router, *_ = make_router()
+    def test_returns_none_and_never_touches_the_publisher(self):
+        router, *_, publisher = make_router()
+
         self.assertIsNone(router.handle(object()))
+
+        publisher.unicast.assert_not_called()
+        publisher.broadcast.assert_not_called()
 
 
 class TestHandleLogin(unittest.TestCase):
 
     def test_delegates_to_auth_service_login(self):
-        router, _, auth_service, _ = make_router()
+        router, _, auth_service, _, _ = make_router()
         auth_service.login.return_value = Mock(username="alice")
 
         router.handle(LoginCommand("alice", "hunter2"))
 
         auth_service.login.assert_called_once_with("alice", "hunter2")
 
-    def test_returns_login_succeeded_with_the_users_username(self):
-        router, _, auth_service, _ = make_router()
+    def test_handle_returns_none(self):
+        router, _, auth_service, _, _ = make_router()
         auth_service.login.return_value = Mock(username="alice")
 
-        response = router.handle(LoginCommand("alice", "hunter2"))
+        self.assertIsNone(router.handle(LoginCommand("alice", "hunter2")))
 
+    def test_unicasts_login_succeeded_with_the_users_username(self):
+        router, _, auth_service, _, publisher = make_router()
+        auth_service.login.return_value = Mock(username="alice")
+
+        router.handle(LoginCommand("alice", "hunter2"))
+
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(response, LoginSucceeded)
         self.assertEqual(response.username, "alice")
 
-    def test_returns_login_failed_when_auth_service_rejects_the_credentials(self):
-        router, _, auth_service, _ = make_router()
+    def test_unicasts_login_failed_when_auth_service_rejects_the_credentials(self):
+        router, _, auth_service, _, publisher = make_router()
         auth_service.login.return_value = None
 
-        response = router.handle(LoginCommand("alice", "wrong"))
+        router.handle(LoginCommand("alice", "wrong"))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(response, LoginFailed)
         self.assertEqual(response.reason, "invalid_credentials")
 
@@ -58,46 +73,52 @@ class TestHandleLogin(unittest.TestCase):
 class TestHandleRegister(unittest.TestCase):
 
     def test_delegates_to_auth_service_register(self):
-        router, _, auth_service, _ = make_router()
+        router, _, auth_service, _, _ = make_router()
         auth_service.register.return_value = Mock(username="alice")
 
         router.handle(RegisterCommand("alice", "hunter2"))
 
         auth_service.register.assert_called_once_with("alice", "hunter2")
 
-    def test_returns_register_succeeded_with_the_users_username(self):
-        router, _, auth_service, _ = make_router()
+    def test_unicasts_register_succeeded_with_the_users_username(self):
+        router, _, auth_service, _, publisher = make_router()
         auth_service.register.return_value = Mock(username="alice")
 
-        response = router.handle(RegisterCommand("alice", "hunter2"))
+        router.handle(RegisterCommand("alice", "hunter2"))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(response, RegisterSucceeded)
         self.assertEqual(response.username, "alice")
 
-    def test_returns_register_failed_when_the_username_is_taken(self):
-        router, _, auth_service, _ = make_router()
+    def test_unicasts_register_failed_when_the_username_is_taken(self):
+        router, _, auth_service, _, publisher = make_router()
         auth_service.register.return_value = None
 
-        response = router.handle(RegisterCommand("alice", "hunter2"))
+        router.handle(RegisterCommand("alice", "hunter2"))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(response, RegisterFailed)
         self.assertEqual(response.reason, "username_taken")
 
 
 class TestHandlePlay(unittest.TestCase):
 
-    def test_unknown_username_returns_play_failed_and_never_touches_the_matchmaker(self):
-        router, _, auth_service, matchmaker = make_router()
+    def test_unknown_username_unicasts_play_failed_and_never_touches_the_matchmaker(self):
+        router, _, auth_service, matchmaker, publisher = make_router()
         auth_service.get_user.return_value = None
 
-        response = router.handle(PlayCommand("alice"))
+        router.handle(PlayCommand("alice"))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(response, PlayFailed)
         self.assertEqual(response.reason, "unknown_user")
         matchmaker.find_match.assert_not_called()
 
     def test_looks_up_a_match_using_the_users_rating(self):
-        router, _, auth_service, matchmaker = make_router()
+        router, _, auth_service, matchmaker, _ = make_router()
         auth_service.get_user.return_value = Mock(rating=1250)
         matchmaker.find_match.return_value = None
 
@@ -105,36 +126,62 @@ class TestHandlePlay(unittest.TestCase):
 
         matchmaker.find_match.assert_called_once_with("alice", 1250)
 
-    def test_returns_waiting_when_no_match_is_found(self):
-        router, _, auth_service, matchmaker = make_router()
+    def test_unicasts_waiting_when_no_match_is_found(self):
+        router, _, auth_service, matchmaker, publisher = make_router()
         auth_service.get_user.return_value = Mock(rating=1250)
         matchmaker.find_match.return_value = None
 
-        response = router.handle(PlayCommand("alice"))
+        router.handle(PlayCommand("alice"))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(response, Waiting)
 
-    def test_returns_game_started_with_the_new_sessions_room_id_when_matched(self):
-        router, _, auth_service, matchmaker = make_router()
+    def test_unicasts_game_started_with_the_new_sessions_room_id_when_matched(self):
+        router, _, auth_service, matchmaker, publisher = make_router()
         auth_service.get_user.return_value = Mock(rating=1250)
-        matchmaker.find_match.return_value = Mock(room_id="room-1")
+        session = Mock(room_id="room-1", players={"w": "alice"})
+        matchmaker.find_match.return_value = session
 
-        response = router.handle(PlayCommand("alice"))
+        router.handle(PlayCommand("alice"))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(response, GameStarted)
         self.assertEqual(response.room_id, "room-1")
 
     def test_game_started_carries_the_callers_own_color(self):
-        router, _, auth_service, matchmaker = make_router()
+        router, _, auth_service, matchmaker, publisher = make_router()
         auth_service.get_user.return_value = Mock(rating=1250)
-        session = Mock(room_id="room-1")
+        session = Mock(room_id="room-1", players={"w": "alice"})
         session.color_of.return_value = "b"
         matchmaker.find_match.return_value = session
 
-        response = router.handle(PlayCommand("alice"))
+        router.handle(PlayCommand("alice"))
 
         session.color_of.assert_called_once_with("alice")
+        _, response = publisher.unicast.call_args.args
         self.assertEqual(response.color, "b")
+
+    def test_notifies_every_seated_player_not_just_the_caller(self):
+        # alice was already queued and matched by bob's PlayCommand - she has
+        # no direct reply to this call, but she must still be pushed her own
+        # GameStarted since the room (and any NetworkPublisher subscription)
+        # didn't exist before this call ever happened.
+        router, _, auth_service, matchmaker, publisher = make_router()
+        auth_service.get_user.return_value = Mock(rating=1250)
+        session = Mock(room_id="room-1", players={"w": "alice", "b": "bob"})
+        session.color_of.side_effect = lambda name: next(
+            (color for color, username in session.players.items() if username == name), None
+        )
+        matchmaker.find_match.return_value = session
+
+        router.handle(PlayCommand("bob"))
+
+        recipients = {call.args[0]: call.args[1] for call in publisher.unicast.call_args_list}
+        self.assertEqual(set(recipients), {"alice", "bob"})
+        self.assertEqual(recipients["alice"].color, "w")
+        self.assertEqual(recipients["bob"].color, "b")
 
 
 class TestHandleCreateRoom(unittest.TestCase):
@@ -157,24 +204,27 @@ class TestHandleCreateRoom(unittest.TestCase):
 
         session.join.assert_called_once_with("alice")
 
-    def test_returns_room_created_with_the_new_room_id(self):
-        router, game_manager, *_ = make_router()
+    def test_unicasts_room_created_with_the_new_room_id(self):
+        router, game_manager, _, _, publisher = make_router()
         game_manager.create_session.return_value = Mock(room_id="room-1")
 
-        response = router.handle(CreateRoomCommand("alice"))
+        router.handle(CreateRoomCommand("alice"))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(response, RoomCreated)
         self.assertEqual(response.room_id, "room-1")
 
     def test_room_created_carries_the_creators_own_color(self):
-        router, game_manager, *_ = make_router()
+        router, game_manager, _, _, publisher = make_router()
         session = Mock(room_id="room-1")
         session.color_of.return_value = "w"
         game_manager.create_session.return_value = session
 
-        response = router.handle(CreateRoomCommand("alice"))
+        router.handle(CreateRoomCommand("alice"))
 
         session.color_of.assert_called_once_with("alice")
+        _, response = publisher.unicast.call_args.args
         self.assertEqual(response.color, "w")
 
 
@@ -188,12 +238,14 @@ class TestHandleJoinRoom(unittest.TestCase):
 
         game_manager.get_session.assert_called_once_with("room-1")
 
-    def test_unknown_room_id_returns_room_join_failed_and_joins_nothing(self):
-        router, game_manager, *_ = make_router()
+    def test_unknown_room_id_unicasts_room_join_failed_and_joins_nothing(self):
+        router, game_manager, _, _, publisher = make_router()
         game_manager.get_session.return_value = None
 
-        response = router.handle(JoinRoomCommand("bob", "no-such-room"))
+        router.handle(JoinRoomCommand("bob", "no-such-room"))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "bob")
         self.assertIsInstance(response, RoomJoinFailed)
         self.assertEqual(response.reason, "room_not_found")
 
@@ -207,24 +259,27 @@ class TestHandleJoinRoom(unittest.TestCase):
         session.join.assert_called_once_with("bob")
 
     def test_room_joined_carries_the_joiners_own_color(self):
-        router, game_manager, *_ = make_router()
+        router, game_manager, _, _, publisher = make_router()
         session = Mock(room_id="room-1")
         session.color_of.return_value = "b"
         game_manager.get_session.return_value = session
 
-        response = router.handle(JoinRoomCommand("bob", "room-1"))
+        router.handle(JoinRoomCommand("bob", "room-1"))
 
         session.color_of.assert_called_once_with("bob")
+        _, response = publisher.unicast.call_args.args
         self.assertEqual(response.color, "b")
 
-    def test_returns_room_joined_with_the_sessions_current_state(self):
-        router, game_manager, *_ = make_router()
+    def test_unicasts_room_joined_with_the_sessions_current_state(self):
+        router, game_manager, _, _, publisher = make_router()
         session = Mock(room_id="room-1")
         session.get_state.return_value = "the_state"
         game_manager.get_session.return_value = session
 
-        response = router.handle(JoinRoomCommand("bob", "room-1"))
+        router.handle(JoinRoomCommand("bob", "room-1"))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "bob")
         self.assertIsInstance(response, RoomJoined)
         self.assertEqual(response.room_id, "room-1")
         self.assertEqual(response.state, "the_state")
@@ -232,18 +287,19 @@ class TestHandleJoinRoom(unittest.TestCase):
 
 class TestHandleMove(unittest.TestCase):
     """ConnectionRouter itself is routing-only now: look up the session,
-    build Positions, delegate to GameSession.request_move(), return the
-    current state. All the "is this a legal attempt" permission logic lives
-    in GameSession (see tests/session/test_game_session.py::TestRequestMove)
-    - the router never inspects ownership, bounds, or the board itself."""
+    build Positions, delegate to GameSession.request_move(), unicast the
+    current state back to the mover. All the "is this a legal attempt"
+    permission logic lives in GameSession (see tests/session/test_game_session.py
+    ::TestRequestMove) - the router never inspects ownership, bounds, or the
+    board itself."""
 
-    def test_unknown_room_id_returns_none_and_never_touches_a_session(self):
-        router, game_manager, *_ = make_router()
+    def test_unknown_room_id_never_touches_a_session_or_the_publisher(self):
+        router, game_manager, _, _, publisher = make_router()
         game_manager.get_session.return_value = None
 
-        response = router.handle(MoveCommand("alice", "no-such-room", (0, 0), (0, 1)))
+        router.handle(MoveCommand("alice", "no-such-room", (0, 0), (0, 1)))
 
-        self.assertIsNone(response)
+        publisher.unicast.assert_not_called()
 
     def test_looks_up_the_session_by_room_id(self):
         router, game_manager, *_ = make_router()
@@ -268,14 +324,16 @@ class TestHandleMove(unittest.TestCase):
         self.assertEqual((source.get_row(), source.get_col()), (1, 2))
         self.assertEqual((destination.get_row(), destination.get_col()), (3, 4))
 
-    def test_returns_game_state_updated_with_the_sessions_current_state(self):
-        router, game_manager, *_ = make_router()
+    def test_unicasts_game_state_updated_with_the_sessions_current_state(self):
+        router, game_manager, _, _, publisher = make_router()
         session = Mock(room_id="room-1")
         session.get_state.return_value = "the_state"
         game_manager.get_session.return_value = session
 
-        response = router.handle(MoveCommand("alice", "room-1", (0, 0), (0, 1)))
+        router.handle(MoveCommand("alice", "room-1", (0, 0), (0, 1)))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(response, GameStateUpdated)
         self.assertEqual(response.room_id, "room-1")
         self.assertEqual(response.state, "the_state")
@@ -293,18 +351,19 @@ class TestHandleMove(unittest.TestCase):
 
         session.events.publish.assert_not_called()
 
-    def test_returns_the_current_state_even_when_the_session_rejects_the_move(self):
+    def test_unicasts_the_current_state_even_when_the_session_rejects_the_move(self):
         # The router never inspects request_move's return value - a rejected
         # attempt still gets the current (unchanged) state back, exactly
         # like a legal one. GameSession is the only one deciding legality.
-        router, game_manager, *_ = make_router()
+        router, game_manager, _, _, publisher = make_router()
         session = Mock(room_id="room-1")
         session.request_move.return_value = MoveResult.illegal("not_your_piece")
         session.get_state.return_value = "the_state"
         game_manager.get_session.return_value = session
 
-        response = router.handle(MoveCommand("bob", "room-1", (0, 0), (0, 1)))
+        router.handle(MoveCommand("bob", "room-1", (0, 0), (0, 1)))
 
+        _, response = publisher.unicast.call_args.args
         self.assertIsInstance(response, GameStateUpdated)
         self.assertEqual(response.state, "the_state")
 
@@ -312,13 +371,13 @@ class TestHandleMove(unittest.TestCase):
 class TestHandleJump(unittest.TestCase):
     """Same shape as TestHandleMove - see its docstring."""
 
-    def test_unknown_room_id_returns_none_and_never_touches_a_session(self):
-        router, game_manager, *_ = make_router()
+    def test_unknown_room_id_never_touches_a_session_or_the_publisher(self):
+        router, game_manager, _, _, publisher = make_router()
         game_manager.get_session.return_value = None
 
-        response = router.handle(JumpCommand("alice", "no-such-room", (0, 0)))
+        router.handle(JumpCommand("alice", "no-such-room", (0, 0)))
 
-        self.assertIsNone(response)
+        publisher.unicast.assert_not_called()
 
     def test_looks_up_the_session_by_room_id(self):
         router, game_manager, *_ = make_router()
@@ -341,49 +400,54 @@ class TestHandleJump(unittest.TestCase):
         self.assertIsInstance(position, Position)
         self.assertEqual((position.get_row(), position.get_col()), (1, 2))
 
-    def test_returns_game_state_updated_with_the_sessions_current_state(self):
-        router, game_manager, *_ = make_router()
+    def test_unicasts_game_state_updated_with_the_sessions_current_state(self):
+        router, game_manager, _, _, publisher = make_router()
         session = Mock(room_id="room-1")
         session.get_state.return_value = "the_state"
         game_manager.get_session.return_value = session
 
-        response = router.handle(JumpCommand("alice", "room-1", (0, 0)))
+        router.handle(JumpCommand("alice", "room-1", (0, 0)))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(response, GameStateUpdated)
         self.assertEqual(response.room_id, "room-1")
         self.assertEqual(response.state, "the_state")
 
-    def test_returns_the_current_state_even_when_the_session_rejects_the_jump(self):
-        router, game_manager, *_ = make_router()
+    def test_unicasts_the_current_state_even_when_the_session_rejects_the_jump(self):
+        router, game_manager, _, _, publisher = make_router()
         session = Mock(room_id="room-1")
         session.request_jump.return_value = MoveResult.illegal("not_your_piece")
         session.get_state.return_value = "the_state"
         game_manager.get_session.return_value = session
 
-        response = router.handle(JumpCommand("bob", "room-1", (0, 0)))
+        router.handle(JumpCommand("bob", "room-1", (0, 0)))
 
+        _, response = publisher.unicast.call_args.args
         self.assertIsInstance(response, GameStateUpdated)
         self.assertEqual(response.state, "the_state")
 
 
 class TestHandleGetState(unittest.TestCase):
 
-    def test_unknown_room_id_returns_none(self):
-        router, game_manager, *_ = make_router()
+    def test_unknown_room_id_never_touches_the_publisher(self):
+        router, game_manager, _, _, publisher = make_router()
         game_manager.get_session.return_value = None
 
-        response = router.handle(GetStateCommand("no-such-room"))
+        router.handle(GetStateCommand("alice", "no-such-room"))
 
-        self.assertIsNone(response)
+        publisher.unicast.assert_not_called()
 
-    def test_returns_game_state_updated_without_joining_or_moving_anything(self):
-        router, game_manager, *_ = make_router()
+    def test_unicasts_game_state_updated_without_joining_or_moving_anything(self):
+        router, game_manager, _, _, publisher = make_router()
         session = Mock(room_id="room-1")
         session.get_state.return_value = "the_state"
         game_manager.get_session.return_value = session
 
-        response = router.handle(GetStateCommand("room-1"))
+        router.handle(GetStateCommand("alice", "room-1"))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(response, GameStateUpdated)
         self.assertEqual(response.room_id, "room-1")
         self.assertEqual(response.state, "the_state")
@@ -393,12 +457,14 @@ class TestHandleGetState(unittest.TestCase):
 
 class TestHandleCheckReconnect(unittest.TestCase):
 
-    def test_no_reconnectable_session_returns_no_reconnect_available(self):
-        router, game_manager, *_ = make_router()
+    def test_no_reconnectable_session_unicasts_no_reconnect_available(self):
+        router, game_manager, _, _, publisher = make_router()
         game_manager.find_reconnectable_session.return_value = None
 
-        response = router.handle(CheckReconnectCommand("alice"))
+        router.handle(CheckReconnectCommand("alice"))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(response, NoReconnectAvailable)
 
     def test_looks_up_the_reconnectable_session_by_username(self):
@@ -409,14 +475,16 @@ class TestHandleCheckReconnect(unittest.TestCase):
 
         game_manager.find_reconnectable_session.assert_called_once_with("alice")
 
-    def test_a_reconnectable_session_returns_its_room_id_and_the_players_color(self):
-        router, game_manager, *_ = make_router()
+    def test_a_reconnectable_session_unicasts_its_room_id_and_the_players_color(self):
+        router, game_manager, _, _, publisher = make_router()
         session = Mock(room_id="room-1")
         session.color_of.return_value = "b"
         game_manager.find_reconnectable_session.return_value = session
 
-        response = router.handle(CheckReconnectCommand("bob"))
+        router.handle(CheckReconnectCommand("bob"))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "bob")
         self.assertIsInstance(response, ReconnectAvailable)
         self.assertEqual(response.room_id, "room-1")
         self.assertEqual(response.color, "b")
@@ -426,16 +494,20 @@ class TestHandleCheckReconnect(unittest.TestCase):
 class TestEndToEndThroughRealGameManagerAndController(unittest.TestCase):
     """Proves the exact chain requested: MoveCommand -> game_manager lookup
     -> session.controller.handle_move() -> a real GameEngine move, with no
-    fake/mock collaborators and no transport at all."""
+    fake/mock collaborators (besides the publisher, whose sends are just
+    recorded here, never actually delivered anywhere) and no transport at
+    all."""
 
     def test_a_legal_move_actually_moves_the_piece_on_the_real_board(self):
         from SERVER.session.game_manager import GameManager
-        from SERVER.model.position import Position as RealPosition
+        from SERVER.engine.model.position import Position as RealPosition
 
         game_manager = GameManager()
-        router = ConnectionRouter(game_manager, Mock(), Mock())
+        publisher = Mock()
+        router = ConnectionRouter(game_manager, Mock(), Mock(), publisher)
 
-        created = router.handle(CreateRoomCommand("alice"))
+        router.handle(CreateRoomCommand("alice"))
+        _, created = publisher.unicast.call_args.args
         router.handle(JoinRoomCommand("bob", created.room_id))
 
         # pictures/board.csv puts white's pawns on row 6; a single-step
@@ -444,8 +516,9 @@ class TestEndToEndThroughRealGameManagerAndController(unittest.TestCase):
         piece = board.get_piece(RealPosition(6, 0))
         self.assertIsNotNone(piece)
 
-        response = router.handle(MoveCommand("alice", created.room_id, (6, 0), (5, 0)))
+        router.handle(MoveCommand("alice", created.room_id, (6, 0), (5, 0)))
 
+        _, response = publisher.unicast.call_args.args
         self.assertIsInstance(response, GameStateUpdated)
         # The move is scheduled as an in-flight Motion rather than landing
         # instantly, so right after handle_move() it's still resolving.
@@ -459,13 +532,16 @@ class TestEndToEndThroughRealGameManagerAndController(unittest.TestCase):
         from SERVER.session.game_manager import GameManager
 
         game_manager = GameManager()
-        router = ConnectionRouter(game_manager, Mock(), Mock())
+        publisher = Mock()
+        router = ConnectionRouter(game_manager, Mock(), Mock(), publisher)
 
-        created = router.handle(CreateRoomCommand("alice"))
+        router.handle(CreateRoomCommand("alice"))
+        _, created = publisher.unicast.call_args.args
         router.handle(JoinRoomCommand("bob", created.room_id))
 
-        response = router.handle(MoveCommand("alice", created.room_id, (6, 0), (99, 99)))
+        router.handle(MoveCommand("alice", created.room_id, (6, 0), (99, 99)))
 
+        _, response = publisher.unicast.call_args.args
         self.assertIsInstance(response, GameStateUpdated)
         self.assertEqual(response.state.motions, [])
 
@@ -477,9 +553,11 @@ class TestEndToEndThroughRealGameManagerAndController(unittest.TestCase):
         from SERVER.network.network_publisher import NetworkPublisher
 
         game_manager = GameManager()
-        router = ConnectionRouter(game_manager, Mock(), Mock())
+        publisher = Mock()
+        router = ConnectionRouter(game_manager, Mock(), Mock(), publisher)
 
-        created = router.handle(CreateRoomCommand("alice"))
+        router.handle(CreateRoomCommand("alice"))
+        _, created = publisher.unicast.call_args.args
         router.handle(JoinRoomCommand("bob", created.room_id))
         session = game_manager.get_session(created.room_id)
 
@@ -505,30 +583,35 @@ class TestLoginEndToEndWithRealAuthService(unittest.TestCase):
         from SERVER.accounts.sqlite_user_repository import SqliteUserRepository
 
         auth_service = AuthService(SqliteUserRepository(":memory:"))
-        return ConnectionRouter(Mock(), auth_service, Mock()), auth_service
+        publisher = Mock()
+        return ConnectionRouter(Mock(), auth_service, Mock(), publisher), auth_service, publisher
 
     def test_registered_user_can_log_in_through_the_router(self):
-        router, auth_service = self.make_router_with_real_auth()
+        router, auth_service, publisher = self.make_router_with_real_auth()
         auth_service.register("alice", "hunter2")
 
-        response = router.handle(LoginCommand("alice", "hunter2"))
+        router.handle(LoginCommand("alice", "hunter2"))
 
+        username, response = publisher.unicast.call_args.args
+        self.assertEqual(username, "alice")
         self.assertIsInstance(response, LoginSucceeded)
         self.assertEqual(response.username, "alice")
 
     def test_wrong_password_fails_through_the_router(self):
-        router, auth_service = self.make_router_with_real_auth()
+        router, auth_service, publisher = self.make_router_with_real_auth()
         auth_service.register("alice", "hunter2")
 
-        response = router.handle(LoginCommand("alice", "wrong"))
+        router.handle(LoginCommand("alice", "wrong"))
 
+        _, response = publisher.unicast.call_args.args
         self.assertIsInstance(response, LoginFailed)
 
     def test_unregistered_username_fails_through_the_router(self):
-        router, _ = self.make_router_with_real_auth()
+        router, _, publisher = self.make_router_with_real_auth()
 
-        response = router.handle(LoginCommand("nobody", "whatever"))
+        router.handle(LoginCommand("nobody", "whatever"))
 
+        _, response = publisher.unicast.call_args.args
         self.assertIsInstance(response, LoginFailed)
 
 

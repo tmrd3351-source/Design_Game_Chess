@@ -1,6 +1,6 @@
 import unittest
 
-from SERVER.model.move_result import MoveResult
+from SERVER.engine.model.move_result import MoveResult
 
 
 class TestMoveResult(unittest.TestCase):

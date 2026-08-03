@@ -1,4 +1,4 @@
-from SERVER.model.position import Position
+from SERVER.engine.model.position import Position
 
 SINGLE_STEP_KINDS = {"K", "N"}
 

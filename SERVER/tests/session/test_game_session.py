@@ -7,8 +7,8 @@ from SERVER.events.event_types import (
     PLAYER_JOINED, GAME_STARTED, MOVE_COMPLETED, GAME_ENDED,
     PLAYER_DISCONNECTED, PLAYER_RECONNECTED,
 )
-from SERVER.model.position import Position
-from SERVER.model.move_result import MoveResult
+from SERVER.engine.model.position import Position
+from SERVER.engine.model.move_result import MoveResult
 
 
 def make_session(room_id="abc123"):

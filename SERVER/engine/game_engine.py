@@ -1,7 +1,7 @@
 from SERVER.config.constants import MOVE_TIME, MOTION_TRANSLATE, MOTION_JUMP
 from SERVER.engine.route import compute_route
-from SERVER.model.motion import Motion
-from SERVER.model.move_result import MoveResult
+from SERVER.engine.model.motion import Motion
+from SERVER.engine.model.move_result import MoveResult
 
 #מנהל את הזמן של המשחק מקבל פקודות מהמשתמש ומתחיל תנועות
 class GameEngine:

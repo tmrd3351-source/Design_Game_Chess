@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from SERVER.model.game_state import GameState
-from SERVER.model.position import Position
+from SERVER.engine.model.game_state import GameState
+from SERVER.engine.model.position import Position
 
 
 class TestGameStateConstruction(unittest.TestCase):

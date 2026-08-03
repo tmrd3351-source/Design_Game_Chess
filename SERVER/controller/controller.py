@@ -1,4 +1,4 @@
-from SERVER.model.game_state import GameState
+from SERVER.engine.model.game_state import GameState
 
 
 class Controller:

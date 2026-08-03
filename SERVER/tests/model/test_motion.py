@@ -2,8 +2,8 @@ import unittest
 from unittest.mock import Mock
 
 from SERVER.config.constants import MOTION_TRANSLATE, MOTION_JUMP
-from SERVER.model.motion import Motion
-from SERVER.model.position import Position
+from SERVER.engine.model.motion import Motion
+from SERVER.engine.model.position import Position
 
 
 class TestMotionConstruction(unittest.TestCase):

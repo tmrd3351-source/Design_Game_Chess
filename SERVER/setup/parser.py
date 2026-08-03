@@ -1,7 +1,7 @@
 from SERVER.config.constants import BOARD_HEADER, COMMANDS_HEADER, EMPTY_CELL, VALID_TOKENS
-from SERVER.model.board import Board
-from SERVER.model.piece import Piece
-from SERVER.model.position import Position
+from SERVER.engine.model.board import Board
+from SERVER.engine.model.piece import Piece
+from SERVER.engine.model.position import Position
 
 
 def parse_input():

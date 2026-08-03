@@ -5,10 +5,10 @@ from SHARED.network.protocol import (
     LoginCommand, PlayCommand, CreateRoomCommand, JoinRoomCommand, MoveCommand,
     LoginSucceeded, LoginFailed, GameStarted, Waiting, RoomCreated, GameStateUpdated,
 )
-from SERVER.model.board import Board
-from SERVER.model.piece import Piece
-from SERVER.model.position import Position
-from SERVER.model.game_state import GameState
+from SERVER.engine.model.board import Board
+from SERVER.engine.model.piece import Piece
+from SERVER.engine.model.position import Position
+from SERVER.engine.model.game_state import GameState
 
 
 class TestRoundTrip(unittest.TestCase):
